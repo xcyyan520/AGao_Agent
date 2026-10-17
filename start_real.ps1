@@ -1,4 +1,4 @@
-# start_real.ps1 —— 用真实的阿里云 DashScope 跑「边说边出题」
+﻿# start_real.ps1 —— 用真实的阿里云 DashScope 跑「边说边出题」
 #
 # 用法（在 07-同步思考 目录下）：
 #   .\start_real.ps1
