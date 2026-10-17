@@ -1,0 +1,19 @@
+# 运行时产物，别进仓库
+
+# 日志与临时输出
+.run/*.log
+.run/*.err
+.run/*.txt
+
+# 端到端跑完的明细（体积大，且每次都不一样）
+.run/e2e_real_corpus.*.json
+
+# 进程/端口相关的一次性脚本产物
+.run/server_real.log
+.run/server_real.err.log
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

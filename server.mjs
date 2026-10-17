@@ -53,6 +53,7 @@ function newSession(id, conf = {}) {
     judge: null,
     chunker: null,
     clients: new Set(),
+    heartbeat: null,      // SSE 心跳定时器，见 startHeartbeat()
     startedAt: Date.now(),
     transcript: [],      // 面试官提问 / 候选人回答的原始流
     finalChunks: [],     // ASR 定稿的句子
@@ -105,6 +106,40 @@ function broadcast(s, msg) {
   for (const res of s.clients) {
     try { res.write(data); } catch (_) { s.clients.delete(res); }
   }
+}
+
+/* ── SSE 心跳 ──
+   为什么需要：Cloudflare 快速隧道这类中间层会**缓冲响应体**，表现是一种
+   最阴的失败——EventSource 的 onopen 照常触发（HTTP 头已经回来了），
+   但 body 里一条 data: 都送不到页面，也不报错。前端只靠 onopen/onerror
+   判断的话，会一直显示「已连接」，而题目永远不出现。
+
+   发的是**真正的事件**（type: 'hb'），不是 `:` 注释行。这一点很关键：
+   - 注释不触发 onmessage，前端就没法用它判断「还活着吗」；
+   - 而前端唯一可靠的判据就是「最近有没有收到过事件」。
+   所以心跳必须能进 onmessage，前端不用它做业务，只用来刷新存活时间。
+   （实测：即使发事件也穿不过快速隧道的缓冲，但那是隧道的问题；
+     对正常网络，这个心跳才是防「空闲被代理掐断」的那道保险。）
+
+   每 5 秒一次：够密，前端才能在十几秒内判定「连上了但没数据」；
+   负载可以忽略（一条 30 字节的 JSON）。 */
+const SSE_HEARTBEAT_MS = 5000;
+
+function startHeartbeat(s) {
+  if (s.heartbeat) return;
+  s.heartbeat = setInterval(() => {
+    const data = `data: ${JSON.stringify({ type: 'hb', t: Date.now() })}\n\n`;
+    for (const res of s.clients) {
+      try { res.write(data); } catch (_) { s.clients.delete(res); }
+    }
+    if (!s.clients.size) stopHeartbeat(s);
+  }, SSE_HEARTBEAT_MS);
+  // 别让心跳把进程钉住：这是后台维护任务，不该阻止 node 退出
+  s.heartbeat.unref?.();
+}
+
+function stopHeartbeat(s) {
+  if (s.heartbeat) { clearInterval(s.heartbeat); s.heartbeat = null; }
 }
 
 /**
@@ -175,13 +210,17 @@ const server = http.createServer(async (req, res) => {
       });
       res.write(': connected\n\n');
       s.clients.add(res);
+      startHeartbeat(s);
       // 补发已有历史，后加入的面试官能看到之前的判断
       for (const r of s.judge.history) {
         // 只发给这一个新连上来的客户端（不是广播）。
         // type 写在最后：payload 里如果有同名字段，不能让它盖掉路由用的 type。
         res.write(`data: ${JSON.stringify({ ...r, type: 'nextq', replay: true })}\n\n`);
       }
-      req.on('close', () => s.clients.delete(res));
+      req.on('close', () => {
+        s.clients.delete(res);
+        if (!s.clients.size) stopHeartbeat(s);
+      });
       return;
     }
 

@@ -291,24 +291,79 @@ let saidEl = null;       // 候选人这一段回答累积在哪个元素里
 let nqSeq = -1;          // 顶部面板上这条建议对应的块号
 let gotDraft = false;    // 这一块的问题是否已经提前上屏过
 
+/* 已经完整画进面板的最大块号（只增不减）。
+   注意 draft 不抬这个数：draft 只画了问题那一行，理由/依据还没到，
+   要是它把水位抬上去，轮询就不会再来补全那一条了。
+   抬水位的只有 showNext（整轮结束）。 */
+let ceilSeq = -1;
+/* 上一轮轮询看到的历史条数。只增不减，用它跳过重复的补行工作。 */
+let histLen = -1;
+/* SSE 当前是不是通的。不通时页面靠 2 秒轮询拿题——
+   手机走 Cloudflare 快速隧道时，SSE 大多是「连得上但收不到数据」，
+   这时它就是唯一的上屏通道。 */
+let esOpen = false;
+
 /* ── 事件流 ── */
+/* SSE 断了以后 EventSource 会自己重连，但重连成功与否最晚要等下一次
+   onopen/onerror 才知道。轮询那边靠 esOpen 判断该不该接管，
+   所以这里给一个「多久没消息就算不通」的保守兜底。
+
+   ★ 为什么光靠 onopen 不够（踩过，很难查）：
+   Cloudflare 快速隧道会对响应体做缓冲，表现是一种**静默失败**——
+   HTTP 头正常回来，onopen 照常触发，页面显示「已连接」，
+   但 body 里一条 data: 都送不到，而且 onerror 永远不触发。
+   结果就是：连接状态一片绿，题目却一个都不出，人以为 AI 坏了。
+
+   所以判据不能是「连上了没有」，必须是「**最近有没有真的收到东西**」。
+   服务端每 5 秒发一条 `{type:'hb'}` 事件（前端不拿它做业务，只用它刷新
+   存活时间），这里盯的是「多久没收到过任何消息」。 */
+let lastMsgAt = 0;
+const SSE_STALE_MS = 14000;   // 服务端 5 秒一次心跳，14 秒没动静就判不通
+
+/* 标记 SSE 不通：切到轮询，并把状态如实写出来。
+   注意文案不能写成「断线」——线其实连着，是数据过不来，
+   写「断线」会让人去查网络，而真正该做的是等轮询补上。 */
+function markOffline(){
+  if(!esOpen) return;          // 已经是离线态，别反复改 DOM
+  esOpen = false;
+  $('connPill').textContent = '改用轮询';
+  $('connPill').className = 'pill warn';
+  $('connPill').title = '这个网络下 SSE 连得上但数据过不来（Cloudflare 快速隧道就是这样）。题目改由每 2 秒一次的轮询送上屏，最多慢 2 秒，功能不缺。';
+}
+
 function connect(){
   const es = new EventSource(`/events?s=${encodeURIComponent(SESSION)}`);
 
   es.onopen = () => {
+    esOpen = true;
+    lastMsgAt = Date.now();
     $('connPill').textContent = '已连接';
     $('connPill').className = 'pill live';
   };
   es.onerror = () => {
-    $('connPill').textContent = '断开，重连中…';
+    esOpen = false;
+    $('connPill').textContent = '断线，改用轮询';
     $('connPill').className = 'pill warn';
+    $('connPill').title = '这个网络不走 SSE（Cloudflare 快速隧道就是这样）。题目改由每 2 秒一次的轮询送上屏，最多慢 2 秒，不影响用。';
   };
 
   es.onmessage = ev => {
+    lastMsgAt = Date.now();
+    if(!esOpen){                 // 之前被判死、现在又来数据了：活过来了
+      esOpen = true;
+      $('connPill').textContent = '已连接';
+      $('connPill').className = 'pill live';
+    }
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     handle(m);
   };
 }
+
+/* 每 3 秒看一眼：连上了却一直没数据 → 判死，让轮询接管。
+   这个检查必须独立于 refreshState（那个有两秒节奏，而且失败时静默）。 */
+setInterval(() => {
+  if(esOpen && lastMsgAt && Date.now() - lastMsgAt > SSE_STALE_MS) markOffline();
+}, 3000);
 
 function handle(m){
   switch(m.type){
@@ -354,6 +409,11 @@ function handle(m){
       $('btnStop').disabled = true;
       addNotice(m.aborted ? '回放已中止。' : '回放结束。');
       refreshState();
+      break;
+
+    case 'hb':
+      // 心跳。onmessage 已经把 lastMsgAt 刷新了，这里什么都不用做；
+      // 列出来是为了让读代码的人知道这个 type 是有意忽略的，不是漏了。
       break;
   }
 }
@@ -428,6 +488,8 @@ function showNext(m){
     // 模型没给出可用的问题（格式崩了）：如实说，不要装作没事
     setState('这一块没出题', 'warn');
   }
+  // 已经定稿的块号：轮询靠它判断面板要不要换题，所以只有走到这一支才抬。
+  if(m.question && m.seq > ceilSeq) ceilSeq = m.seq;
   if(m.question && !document.getElementById('qlog-' + m.seq)){
     // 按 seq 去重：SSE 断开重连时服务端会把整段历史补发一遍，
     // 不去重屏幕上就会出现两行一模一样的问题，面试官会以为 AI 问重复了。
@@ -450,6 +512,9 @@ function showNext(m){
 /* 面试官问出了新问题：上一条建议已经过期，面板回到等待态，
    同时从他这一句开始的回答要另起一块。 */
 function resetPanel(){
+  /* 注意 ceilSeq 故意不在这里归零。它记的是「AI 已经定稿到第几块」，
+     和面板现在摆的是哪一题无关；归零的话 2 秒后的轮询会立刻把上一题
+     重新顶回面板，看起来就像 AI 又推荐了一遍同一道题。 */
   nqSeq = -1;
   gotDraft = false;
   $('nqQ').textContent = '等他说完这一段，我会跟着他的话出下一道题。';
@@ -490,12 +555,51 @@ function scroll(){
   if(near) f.scrollTop = f.scrollHeight;
 }
 
+/* ── 轮询兜底 ──
+   题目原本只走 SSE。可有些网络环境下 SSE 根本走不通——最典型的就是
+   Cloudflare 快速隧道（官方明确不支持），手机从外面连进来时表现为：
+   页面能开、统计数字每 2 秒在跳，但「下一个问题」永远停在初始文案，
+   看起来就像这个功能坏了。
+   所以每次轮询都顺带看一眼 /api/state 里的 history：SSE 通的时候它什么
+   都不做（面板早就跟上来了），SSE 不通的时候它就是唯一的上屏通道，
+   代价最多是题目晚 2 秒出现。 */
+const BACKFILL_MAX = 30;   // 首次最多往回补多少条日志，长面试能攒到几十条
+
+function pollBackfill(history){
+  const items = (history || []).filter(r => r && r.question);
+  if(!items.length) return;
+
+  // 会话被重置过，历史缩水了：当作全新一场重新补
+  if(items.length < histLen) histLen = -1;
+
+  if(histLen < 0){
+    // 第一次拿到历史。手机刚打开页面时日志是空的，面试官会以为之前
+    // 什么都没出过，所以把这一段补上并标成「历史」；只补最后
+    // BACKFILL_MAX 条，再往前的翻也翻不到。
+    const from = Math.max(0, items.length - BACKFILL_MAX);
+    for(let i = from; i < items.length; i++) showNext({ ...items[i], replay: true });
+  } else if(items.length > histLen){
+    // SSE 漏掉了几条（通道不通，或者中途断过）。这几条刚出炉，不标历史。
+    for(let i = histLen; i < items.length; i++) showNext({ ...items[i] });
+  }
+  histLen = items.length;
+
+  /* 面板该不该换题：看有没有「已经定稿、但从来没上过面板」的那一条。
+     这里用 ceilSeq 而不是 nqSeq —— 面试官问出新问题时 resetPanel() 会把
+     nqSeq 打回 -1，要是拿它做判据，轮询马上会把上一题又顶回面板，
+     面试官会以为 AI 在重复推荐。ceilSeq 只涨不跌，正好避开这个。 */
+  const last = items[items.length - 1];
+  if(last.seq > ceilSeq) showNext({ ...last });
+}
+
 /* ── 状态刷新 ── */
 async function refreshState(){
   try{
     const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}`)).json();
     const heard = s.stats.chunks || 0;
     const made = (s.history || []).length;
+
+    pollBackfill(s.history);
 
     $('stChunks').textContent = heard;
     $('stApplied').textContent = made;

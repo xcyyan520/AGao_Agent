@@ -1,0 +1,4 @@
+vendor/qr/QRCode/ 来自 qrcode-terminal 0.12.0 的 vendor 目录（Apache-2.0）。
+其中的二维码算法实现（QRCode for JavaScript, Kazuhiko Arase, 2009）是 MIT 许可。
+两者都允许随本项目一起分发，原始许可证见本目录 LICENSE-qrcode-terminal.txt
+以及 QRCode/index.js 文件头的版权声明。
