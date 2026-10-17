@@ -81,6 +81,9 @@ if (-not $key) {
 $env:LLM_BASE  = 'https://dashscope.aliyuncs.com/compatible-mode'   # 不带 /v1
 $env:LLM_MODEL = 'deepseek-v4.1-flash'                              # v4.1 后面是短横
 $env:LLM_KEY   = $key
+# 语音识别要单独一把 Key，但没有独立的就用同一把（两者都在百炼）。
+# 不设这个变量的话，手机上点「开始说话」会一直连不上识别服务。
+$env:ASR_KEY   = if ($env:ASR_KEY) { $env:ASR_KEY } else { $key }
 $env:PORT      = "$PORT"
 
 # ── 3. 起服务（如果 8900 已经有服务在跑就复用） ────────────────────────
