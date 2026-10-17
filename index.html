@@ -241,42 +241,8 @@
     flex-wrap:wrap; flex:0 0 auto;
   }
   .stats b{color:var(--fg); font-weight:600}
-  @media(max-width:900px){
-    main{flex-direction:column}
-    /* 侧栏在矮屏上「滚动」而不是「溢出」。
-       之前 .side 是 overflow:visible，max-height 压住后两段 section 的内容
-       直接盖到一起（实测「保存材料」和「语速」两行叠在同一个位置）。
-       不给 section / textarea 设立固定高度——那会在 900px 附近把两段
-       挤到互相覆盖，是修一个 bug 引入另一个。 */
-    .side{
-      width:auto; flex:0 0 auto; max-height:42vh; min-height:0;
-      border-right:none; border-bottom:1px solid var(--line);
-      overflow-y:auto;
-    }
-    /* 手机上把出题区放到最上面。面试进行中最该一直看到的是「下一个问题」，
-       而材料框和回放按钮是准备动作。不调顺序的话，手机上要先滚过材料和
-       回放控件才看得到题——那"尽早"两个字就白写了。 */
-    .stream{order:1}
-    .side{order:2}
-
-    /* .stream 里的 .feed 自己会滚，但 .nextq / .qbar / .stats 是定高。
-       如果 .stream 的盒子比这几块之和小，它们会溢出画到下面的 .side 上
-       （实测 360×640 下 .stream 拿到 187px 却要装 307px，溢出的 120px
-       正好盖住 .side 顶部的「材料库」按钮，把「记录并提问」挡死）。
-       overflow:hidden 在这里是兜底：宁可切掉也不能让两块内容叠在一起。 */
-    .stream{overflow:hidden}
-
-    /* 窄屏上页头要省着用。实测 360px 宽时 header 一开始占 184px（五行），
-       压掉 modelPill 和 padding 之后是 131px（三行）。
-       模型名不是每分钟都要看的东西——设置面板里有完整值，这里只留图标性的
-       提示，把高度还给「下一个问题」。 */
-    header{padding:7px 10px; gap:8px}
-    header h1{font-size:13px}
-    #modelPill{display:none}
-    .nextq{margin:8px 10px 0; padding:9px 11px}
-    .qbar{padding:7px 10px}
-  }
-
+  /* 手机端的布局整段在同名的「手机端」注释里（搜 @media(max-width:900px)），
+     那里离文件末尾更近，覆盖关系更清楚。 */
   /* ── 麦克风 ──
      整块区域就一个按钮，所以按钮要够大：手机上是拇指点的，
      面试进行中不该出现「点偏了没点上，以为坏了」这种事。 */
@@ -299,6 +265,154 @@
   .micshow:empty{display:none}
   .hint{font-size:11.5px; color:var(--dim2); line-height:1.65; margin-top:8px}
   .hint b{color:var(--dim); font-weight:600}
+
+  /* 「更多」按钮：只在手机上出现，见下面的 @media */
+  .iconbtn{display:none; flex:0 0 auto; padding:0; width:34px; height:34px;
+    font-size:17px; line-height:1; border-radius:8px}
+
+  /* 「准备区」（材料/回放/设置）的折叠把手。桌面端永远不显示——
+     桌面上一整条侧栏就在左边，不需要"展开"。 */
+  .side-toggle{
+    display:none; width:100%; align-items:center; gap:8px;
+    background:var(--panel2); border:none; border-bottom:1px solid var(--line);
+    border-radius:0; padding:11px 12px; font-size:12.5px; color:var(--dim);
+    cursor:pointer; text-align:left;
+  }
+  .side-toggle:hover{background:#262b36}
+  .side-toggle span:first-child{flex:1}
+  .side-toggle-arrow{font-size:10px; color:var(--dim2); transition:transform .15s}
+  .side.prep-open .side-toggle-arrow{transform:rotate(180deg)}
+  .side-toggle .dot{
+    width:6px; height:6px; border-radius:50%; background:var(--ok); flex:0 0 auto;
+  }
+
+  /* ══ 手机端 ══════════════════════════════════════════════════════
+     这一段是重写的。原来只有一条 @media(max-width:900px)，把侧栏压成
+     42vh 就完事，实测（390x844 / 360x640）暴露三个硬伤：
+     ① header 折成两行共 85px，四个按钮各 31px 高，拇指点不准；
+     ② 「开始说话」在 360x640 下 top=648 直接掉出首屏——手机上最该
+        先按的按钮，不滚动根本看不见，而人一进来以为没这个功能；
+     ③ 侧栏占 42vh（354px），材料框啃掉 236px，说话区只剩 117px，
+        下面的提示文字溢出到屏幕外。
+     现在的做法：手机上进「面试模式」——顶部只留最要紧的一行，
+     材料和设置全部折叠成折叠条（要准备时才点开），把高度全给
+     「下一个问题」和「开始说话」。 */
+  @media(max-width:900px), (max-height:560px){
+    /* 手机端整体不滚动，各区域自己滚。原来 body 是 overflow:hidden
+       而 .side 是 max-height:42vh + overflow-y:auto，滚动条藏在半屏，
+       手感像"页面卡住了"。 */
+    body{overflow:hidden}
+
+    main{flex-direction:column}
+    /* 出题区在上，准备区在下。面试进行中该一直看到的是题。 */
+    .stream{order:1; overflow:hidden}
+    .side{order:2}
+
+    /* ── 顶栏：一行 ── */
+    header{padding:6px 10px; gap:6px; flex-wrap:nowrap;
+      padding-top:max(6px, env(safe-area-inset-top))}
+    header h1{font-size:13px; flex:0 0 auto}
+    /* 模型名在窄屏上永远是「选填信息」，设置面板里能看到完整值 */
+    #modelPill{display:none}
+    /* 进度 pill 也收掉：它和下面的 stats 讲的是同一件事，
+       而 stats 就在眼睛底下。 */
+    #progPill{display:none}
+    .pill{font-size:10.5px; padding:2px 7px; white-space:nowrap}
+
+    /* 四个动作按钮收进「更多」；.hd-acts 变成下拉面板 */
+    .hd-acts{
+      display:none; position:absolute; right:10px; top:46px; z-index:60;
+      flex-direction:column; gap:6px; padding:8px;
+      background:var(--panel); border:1px solid #3a4150; border-radius:10px;
+      box-shadow:0 12px 32px rgba(0,0,0,.6); min-width:150px;
+    }
+    .hd-acts.open{display:flex}
+    .hd-acts button{width:100%; text-align:left; padding:9px 11px; font-size:13px}
+    .iconbtn{display:flex; align-items:center; justify-content:center}
+
+    /* ── 下一个问题：屏幕的绝对主角 ── */
+    .nextq{
+      margin:8px 10px 0; padding:10px 12px; border-radius:10px;
+      /* 定住高度上限，否则一条长题会把下面的对话流挤没 */
+      max-height:44vh; overflow-y:auto;
+    }
+    .nextq .nq-q{font-size:16px; line-height:1.45}
+    .nextq .nq-q.wait{font-size:13px}
+    .nextq .nq-meta{font-size:12px; margin-top:6px}
+
+    /* ── 输入行：点麦克风说的话会自动填上来 ── */
+    .qbar{padding:6px 10px; gap:6px}
+    .qbar input{padding:8px; font-size:13px}
+    .qbar button{padding:8px 10px; font-size:12.5px; flex:0 0 auto}
+
+    /* ── 对话流：能滚，但至少留两行 ── */
+    .feed{padding:10px; gap:8px; min-height:0}
+    .saidblock{font-size:13px; line-height:1.65}
+
+    .stats{padding:6px 10px; gap:10px; font-size:10.5px;
+      padding-bottom:max(6px, env(safe-area-inset-bottom))}
+    /* 手机上看不出这么多数字的意义，只留三个最要紧的 */
+    #stMerged, #stMem, #stFirst{display:none}
+    .stats span[title]{display:none}
+
+    /* ── 准备区（侧栏）──
+       手机上的大改：材料/回放/设置都是**准备动作**，面试中不该占地方。
+       所以整条侧栏在手机上默认收成一条折叠把手（#btnSideToggle），
+       点开才展开、展开时最多占 46vh 并自己滚。
+       桌面端这个把手不显示（.side-toggle 默认 display:none）。 */
+    .side-toggle{display:flex}
+    .side{
+      width:auto; flex:0 0 auto; min-height:0;
+      border-right:none; border-top:1px solid var(--line);
+      background:var(--panel);
+      /* ★ 收起态：侧栏不占任何多余高度。
+         原来写的是 max-height:42vh（永远占 354px），于是「开始说话」
+         被推到了屏幕外。现在收起 = 只剩把手那 40px。 */
+      max-height:none; overflow:visible;
+    }
+    .side > section{display:none; padding:10px}
+    /* 展开态：把手 + 内容，整体限高自己滚 */
+    .side.prep-open{max-height:46vh; overflow-y:auto}
+    .side.prep-open > section{display:flex}
+    /* 「说话」这一块即使在不展开时也要露出来——它是主路径。
+       所以单独放行，并且挪到最前面。 */
+    .side > #micSec{display:flex; order:-1; padding:10px}
+    .side h2{font-size:11px; margin-bottom:6px}
+    .micbtn{
+      /* 拇指区：实测原样 47px 高，但被侧栏的 42vh 上限顶出了屏幕 */
+      padding:15px 12px; font-size:15px; border-radius:10px; font-weight:600;
+    }
+    .micshow{font-size:12.5px; max-height:56px}
+    .hint{font-size:11px; line-height:1.5}
+
+    /* 材料框在手机上不需要 120px 那么高，够看三四行就行 */
+    #materials{min-height:88px; font-size:11.5px}
+    textarea{font-size:12px}
+
+    /* 弹层在手机上要接近全屏，否则内容挤成一条缝 */
+    .modal{padding:8px; align-items:center}
+    .modal-box{width:100%; max-height:92vh; border-radius:12px}
+    .modal-head{padding:9px 10px}
+    .modal-head h2{font-size:12.5px}
+    .hist-item{padding:9px 10px}
+    .hist-item .acts button{padding:7px 10px; font-size:12px}
+    /* 历史项里的操作按钮在手机上要够大 */
+    .hist-item .acts .mini{font-size:12px; padding:5px 9px}
+  }
+
+  /* 更窄（<=380px）：再把字号压一点，保证「下一个问题」不被截 */
+  @media(max-width:380px){
+    .nextq .nq-q{font-size:15px}
+    header h1{font-size:12px}
+    .stats{font-size:10px; gap:8px}
+  }
+
+  /* 横屏手机：高度是稀缺资源，把侧栏彻底收掉 */
+  @media(max-height:520px){
+    .side{max-height:38vh}
+    .nextq{max-height:38vh; margin-top:6px}
+    header h1{display:none}
+  }
 </style>
 </head>
 <body>
@@ -309,11 +423,45 @@
   <span class="pill" id="modelPill"></span>
   <div class="grow"></div>
   <span class="pill" id="progPill" title="AI 根据他说的话出了几次题。次数追上块数就说明跟得上"></span>
-  <button id="btnSettings">⚙ 设置</button>
-  <button id="btnHist">历史面试</button>
-  <button id="btnSummary">导出复盘</button>
-  <button id="btnReset" class="danger">重置</button>
+  <!-- 手机上这四个按钮挤不下：实测 390px 宽时 header 高 85px、占两行，
+       每个按钮只有 31px 高（拇指点不准），而「下一个问题」被挤到屏幕中段。
+       所以窄屏时收进一个「更多」面板，#btnMore 只在手机上出现。 -->
+  <div class="hd-acts" id="hdActs">
+    <button id="btnSettings">⚙ 设置</button>
+    <button id="btnHist">历史面试</button>
+    <button id="btnSummary">导出复盘</button>
+    <!-- 这个按钮原来叫「重置」，语义不清且吓人：人会以为点下去
+         历史就没了。它实际做的是「把这一场收尾、起名、开下一场」，
+         历史一个字都不删。名字改成「开新的一场」之后就不用解释了。 -->
+    <button id="btnReset">✦ 开新的一场</button>
+  </div>
+  <button id="btnMore" class="iconbtn" aria-label="更多">☰</button>
 </header>
+
+<!-- 开新一场：给刚结束的这场起个名，然后拿到一个新的会话 id。
+     为什么非要起名——历史里躺着一串 s1792154859667 那种 id 谁都不想点开，
+     而「AI 记得你以前面过什么」这个功能的全部价值都压在「能一眼认出
+     那一场是哪一场」上。名字留空也能过，会自动取时间当名字。 -->
+<div id="newWrap" class="modal" style="display:none">
+  <div class="modal-box" style="width:min(420px,100%)">
+    <div class="modal-head">
+      <h2>开一场新的面试</h2>
+      <button id="btnNewClose" class="mini">取消</button>
+    </div>
+    <div style="padding:14px 12px">
+      <label class="f" for="newTitle">这一场叫什么？（给刚结束的这场起名）</label>
+      <input type="text" id="newTitle" maxlength="80" style="width:100%"
+        placeholder="比如：云联科技 · 一面 · 10月17日">
+      <div class="hint" style="margin-top:10px">
+        起完名这一场就会以这个名字留在「历史面试」里，随时能点开看。
+        新的一场是干净的：材料不用重填，但出过的题、说过的话都从头开始。
+      </div>
+      <div class="row mt" style="margin-top:14px">
+        <button id="btnNewGo" class="primary" style="flex:1">开始新的一场</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- 历史面试：以前面过几场、每场出了哪些题。
      这是「AI 记得你之前面过」的可见部分——不然那个记忆是黑盒的。 -->
@@ -332,6 +480,13 @@
 
 <main>
   <aside class="side">
+    <!-- 手机上侧栏默认是收起的（只露这一条）。
+         面试进行中不需要看到材料框——那是面试前的准备动作。
+         这条同时是「展开/收起」的把手，桌面端不显示。 -->
+    <button id="btnSideToggle" class="side-toggle">
+      <span id="sideToggleLabel">准备区（材料 / 回放 / 设置）</span>
+      <span class="side-toggle-arrow" id="sideArrow">▾</span>
+    </button>
     <!-- 关键：材料区可以「长大」，但不能被「压扁」。
          它原来是 flex:1 1 auto，是 flex 列里唯一的可伸缩项；高度不够时会被
          压到比内容还矮，而里面 textarea 的 min-height:120px 压不下去，内容
@@ -454,7 +609,25 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const SESSION = new URLSearchParams(location.search).get('s') || 'default';
+
+/* 这一场面试的 id。
+   ⚠️ 原来是 const，现在必须是 let —— 「重置 = 开新一场」要换掉它。
+   换掉之后所有请求（/events、/api/*）都要跟着走到新 id 上，所以：
+     · 每处 fetch 都现读 SESSION（不要提前把值存进变量）
+     · 换完必须重连 SSE（旧的 EventSource 还钉在旧 id 上）
+   地址栏也会同步成 ?s=<新id>，这样刷新页面、或者把链接发给另一台设备，
+   打开的还是同一场（两个人各开一台设备就靠这个对齐）。 */
+let SESSION = new URLSearchParams(location.search).get('s') || 'default';
+
+/* 把当前场次写回地址栏。用 replaceState 而不是 pushState：
+   换场不该在浏览器里留下几十条历史，否则手机返回键会把面试官
+   带回上一场，看着像"数据错乱"。 */
+function syncUrl(){
+  const u = new URL(location.href);
+  if(SESSION && SESSION !== 'default') u.searchParams.set('s', SESSION);
+  else u.searchParams.delete('s');
+  history.replaceState(null, '', u);
+}
 
 /* ── 出题类型的中文名 ── */
 const TYPE_LABEL = { probe:'追问', fresh:'新方向', wrap:'收尾' };
@@ -518,8 +691,14 @@ function markOffline(){
   $('connPill').title = '这个网络下 SSE 连得上但数据过不来（Cloudflare 快速隧道就是这样）。题目改由每 2 秒一次的轮询送上屏，最多慢 2 秒，功能不缺。';
 }
 
+/* 当前的 EventSource。换场时要先 close 再建新的——
+   不 close 的话旧连接一直挂着，旧场的心跳还在往这里灌，
+   而 handle() 会把旧场的事件画到新场的面板上。 */
+let es = null;
+
 function connect(){
-  const es = new EventSource(`/events?s=${encodeURIComponent(SESSION)}`);
+  if(es){ try{ es.close(); }catch(_){} es = null; }
+  es = new EventSource(`/events?s=${encodeURIComponent(SESSION)}`);
 
   es.onopen = () => {
     esOpen = true;
@@ -950,15 +1129,28 @@ async function loadHist(){
         `<span>${s.lines || 0} 句对话</span>` +
         (s.material_name ? `<span>材料：${esc(s.material_name)}</span>` : '') +
         `</div><div class="qs">点一下展开这一场出过的题</div>` +
-        `<div class="acts"><button class="mini" data-act="load">加载这场</button></div>`;
+        `<div class="acts"><button class="mini" data-act="load">加载这场</button>` +
+        `<button class="mini" data-act="rename">起名</button>` +
+        `<button class="mini danger" data-act="del">删除</button></div>`;
       // 展开才拉题目列表：30 场一次性全拉会把接口拖慢
       d.onclick = async (ev) => {
         /* 「加载这场」和「展开题目」是两件事，别让点击冒泡上去把面板收掉。
            加载 = 把这一场的对话流 + 出过的题完整还原到左边的对话面板，
            效果就是「回到那场面试结束时的样子」。 */
-        if(ev.target.dataset.act === 'load'){
+        const act = ev.target.dataset && ev.target.dataset.act;
+        if(act === 'load'){
           ev.stopPropagation();
           await loadSessionIntoView(s.id, ev.target);
+          return;
+        }
+        if(act === 'rename'){
+          ev.stopPropagation();
+          await renameSession(s.id, s.title, ev.target);
+          return;
+        }
+        if(act === 'del'){
+          ev.stopPropagation();
+          await deleteSession(s.id, ev.target, ttl);
           return;
         }
         const qs = d.querySelector('.qs');
@@ -1070,9 +1262,104 @@ async function loadSessionIntoView(id, btn){
   }
 }
 
-$('btnHist').onclick = () => { $('histWrap').style.display = 'flex'; loadHist(); };
-$('btnHistClose').onclick = () => { $('histWrap').style.display = 'none'; };
+/* ── 给一场历史面试改名 ──
+   用 prompt 而不是另做一个弹层：改名是低频动作，一个输入框足够，
+   而弹层要多一套显示/隐藏/失焦处理（手机上还容易被键盘顶歪）。
+   名字留空 = 清掉名字，历史里会回退成用材料名或 id 显示。 */
+async function renameSession(id, cur, btn){
+  const t = prompt('这一场叫什么名字？（留空则清掉名字）', cur || '');
+  if(t === null) return;              // 点了取消
+  if(btn){ btn.disabled = true; }
+  try{
+    const r = await fetch('/api/sessions/rename', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: id, title: t.trim() })
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || '改名失败');
+    // 改的是本场：顶部的会话名也要跟着变
+    if(id === SESSION && j.title) document.title = `边说边出题 · ${j.title}`;
+    await loadHist();
+    flash(j.title ? `已改名为「${j.title}」` : '名字已清掉');
+  }catch(e){
+    flash('改名失败：' + e.message);
+  }finally{
+    if(btn){ btn.disabled = false; }
+  }
+}
+
+/* ── 删掉一场历史面试 ──
+   ⚠️ 确认文案必须写清「删掉之后再也找不回来」。
+   这一条是给面试官手滑用的刹车，含糊的确认框等于没确认。 */
+async function deleteSession(id, btn, label){
+  if(!confirm(`删除「${label}」？\n\n这一场的对话记录和出过的题会从库里删掉，删了找不回来。`)) return;
+  if(btn){ btn.disabled = true; btn.textContent = '删除中…'; }
+  try{
+    const r = await fetch('/api/sessions/delete', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id })
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error('服务端没答应');
+    /* 删的正好是当前这场：页面上还挂着它的对话和题目，得清掉，
+       否则看起来"删了但还在"。但不要自动换场——人可能只是顺手清一下库。 */
+    if(id === SESSION){
+      $('feed').innerHTML = '<div class="empty" id="emptyHint">这一场的记录已经删掉了。</div>';
+      saidEl = null; saidBlockEl.interviewer = null; flashEl = null;
+      lineCount = 0; histLen = -1; ceilSeq = -1;
+      resetPanel();
+    }
+    await loadHist();
+    flash('已删除');
+  }catch(e){
+    flash('删除失败：' + e.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '删除'; }
+  }
+}
+
+$('btnHist').onclick = () => { $('histWrap').style.display = 'flex'; loadHist(); };$('btnHistClose').onclick = () => { $('histWrap').style.display = 'none'; };
 $('histWrap').onclick = e => { if(e.target.id === 'histWrap') $('histWrap').style.display = 'none'; };
+
+/* ── 手机上的「更多」菜单 ──
+   窄屏时四个动作按钮（设置/历史/复盘/重置）挤不下，收进这个 ☰ 里。
+   点外面或按 Esc 都要能关——手机上没有"点外面"的直觉，
+   所以还要保证再点一次 ☰ 也能收起。 */
+$('btnMore').onclick = e => {
+  e.stopPropagation();
+  const open = $('hdActs').classList.toggle('open');
+  $('btnMore').textContent = open ? '✕' : '☰';
+};
+document.addEventListener('click', e => {
+  if(!$('hdActs').classList.contains('open')) return;
+  if($('hdActs').contains(e.target) || e.target === $('btnMore')) return;
+  $('hdActs').classList.remove('open');
+  $('btnMore').textContent = '☰';
+});
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Escape') return;
+  if($('hdActs').classList.contains('open')){
+    $('hdActs').classList.remove('open');
+    $('btnMore').textContent = '☰';
+  }
+});
+/* 点菜单里的按钮之后要把菜单收起来，否则会盖在刚打开的面板上。 */
+$('hdActs').addEventListener('click', e => {
+  if(e.target.tagName !== 'BUTTON') return;
+  $('hdActs').classList.remove('open');
+  $('btnMore').textContent = '☰';
+});
+
+/* ── 手机上的「准备区」折叠 ──
+   默认收起，只露一条把手。这不是为了好看：360x640 上材料区独占 236px，
+   「开始说话」会被顶到 top=648（屏幕外），而它才是主路径按钮。
+   收起之后一进页面就看到「开始说话」+「下一个问题」，跟产品名对得上。 */
+$('btnSideToggle').onclick = () => {
+  const open = $('btnSideToggle').parentElement.classList.toggle('prep-open');
+  $('sideToggleLabel').textContent = open
+    ? '收起准备区'
+    : '准备区（材料 / 回放 / 设置）';
+};
 
 /* ── 交互 ── */
 $('btnReplayOpen').onclick = () => {
@@ -1150,16 +1437,92 @@ $('btnStop').onclick = async () => {
   $('btnStop').disabled = true;
 };
 
-$('btnReset').onclick = async () => {
-  if(!confirm('清空这场面试的材料、回答和出题记录？')) return;
-  await fetch('/api/reset', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ session:SESSION })
-  });
-  $('feed').innerHTML = '<div class="empty" id="emptyHint">已重置。</div>';
-  flashEl = null;
+/* ══════════════════════════════════════════════════════════════
+   换场：把这一场结束掉，换到一个干净的会话 id 上
+   ══════════════════════════════════════════════════════════════
+
+   ★ 为什么不能只调 /api/reset 就完事（这里踩过一个真实的坑）：
+   /api/reset 清的是服务端那个 id 的内存和库记录，但浏览器手里的
+   EventSource 还钉在旧 id 上——它不会自己知道"场次换了"。结果就是：
+   库里确实开了新的一场，而页面上接着来的事件全是旧场的，
+   服务端的 chunks 数一直涨，界面上一题不出。
+   所以换场是这一整套动作，顺序不能乱：
+     1. 先停麦克风和回放（音频要发到新 id 去，不能继续往旧 id 灌）
+     2. close 掉 SSE（不然旧场的心跳会把"已连接"这个状态一直续命）
+     3. 换 SESSION、同步地址栏
+     4. 重连 SSE、清空页面、拉新状态
+   少做第 1 或第 2 步，症状都是"新的开始不了、旧的停不掉"。 */
+async function switchSession(nextId, { keepMaterial = true } = {}){
+  // 1. 停掉采集（顺序重要：先停音频，再断流）
+  if(micRunning) await stopMic().catch(() => {});
+  try{ await fetch(`/api/stop-replay?s=${encodeURIComponent(SESSION)}`, { method:'POST' }); }catch(_){}
+
+  // 2. 断旧流
+  if(es){ try{ es.close(); }catch(_){} es = null; }
+
+  // 3. 换 id
+  SESSION = nextId || 'default';
+  syncUrl();
+
+  // 4. 清页面：这里是新的一场，上一场的对话、题目都不该还挂着
   resetPanel();
-  refreshState();
+  $('feed').innerHTML = '<div class="empty" id="emptyHint">新的一场已经开始了。点「开始说话」，题目就会跟着来。</div>';
+  saidEl = null;
+  saidBlockEl.interviewer = null;
+  flashEl = null;
+  lineCount = 0;
+  histLen = -1;
+  ceilSeq = -1;
+  nqSeq = -1;
+  gotDraft = false;
+  lastMsgAt = 0;
+
+  // 5. 重连 + 拉状态
+  connect();
+  await refreshState();
+  /* 材料不跟着重置：材料是"这个人是谁"，一场面试里不会变。
+     换场时服务端会从库里把这一场的材料捞回来（getSession 里做的），
+     所以这里的 keepMaterial 只是不主动去清输入框。 */
+  if(!keepMaterial) $('materials').value = '';
+}
+
+$('btnReset').onclick = () => {
+  // 默认名字：时间。留空也能过，但给个能改的默认值比空框好点。
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  $('newTitle').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('newWrap').style.display = 'flex';
+  setTimeout(() => { $('newTitle').focus(); $('newTitle').select(); }, 30);
+};
+$('btnNewClose').onclick = () => { $('newWrap').style.display = 'none'; };
+$('newWrap').onclick = e => { if(e.target.id === 'newWrap') $('newWrap').style.display = 'none'; };
+$('newTitle').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); $('btnNewGo').click(); } };
+
+$('btnNewGo').onclick = async () => {
+  const title = $('newTitle').value.trim();
+  const btn = $('btnNewGo');
+  btn.disabled = true;
+  btn.textContent = '开新一场…';
+  try{
+    /* 一个请求做两件事：给旧场起名 + 拿到新场的 id。
+       合成一次调用的理由：分开调的话，中间任何一步失败都会留下
+       "名字存了但没换场"这种半截状态，而人已经以为换完了。 */
+    const r = await fetch('/api/reset', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session:SESSION, title })
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || '服务端没答应');
+    await switchSession(j.next || ('s' + Date.now()));
+    $('newWrap').style.display = 'none';
+    flash(title ? `这一场已存为「${title}」，新的一场开始了。` : '新的一场开始了。');
+    await loadHist();   // 弹层如果开着，让它立刻反映新名字
+  }catch(e){
+    flash('开新一场失败：' + e.message);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = '开始新的一场';
+  }
 };
 
 $('btnSummary').onclick = async () => {

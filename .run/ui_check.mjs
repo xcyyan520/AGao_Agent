@@ -265,6 +265,95 @@ for (const [label, w, h] of [['桌面 1440', 1440, 900], ['手机 390', 390, 844
 }
 await send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
 
+/* ══ 手机端：准备区折叠 + 主路径按钮要在首屏内 ══════════════════════════
+   这是修「手机上太丑而且不明确」的验证。修之前实测 360x640：
+   侧栏从 371px 起、材料区独占 236px，「开始说话」被顶到 top=648，
+   正好掉出 640 的屏幕外——而它是手机上最该先按的按钮。
+   光看「按钮可达」（滚一下就能点到）是发现不了这个的：
+   那 20 个按钮在布局段里全是绿的，但它们不在**首屏**。
+
+   所以这里量的是三件布局段量不到的事：
+     (1) 折叠把手在手机上看得见、桌面上看不见；
+     (2) 默认收起状态下，「开始说话」和「下一个问题」都在首屏内（不用滚）；
+     (3) 展开之后材料框真的出现了。
+*/
+console.log('\n═══ 手机端：准备区折叠 ═══');
+/* ⚠️ 先把回放段收回去。
+   前面测回放时点过「模拟回放」，那个动作会把 #micSec 隐藏（两者互斥）。
+   不收回去的话，这一段量到的是「麦克风被回放顶掉了」，
+   而不是折叠逻辑本身——第一版就栽在这里，报了个假失败。 */
+await evalJs(`(() => {
+  const rs = document.getElementById('replaySec');
+  if (rs && rs.style.display !== 'none') document.getElementById('btnReplayClose').click();
+})()`);
+await sleep(400);
+await send('Emulation.setDeviceMetricsOverride',
+  { width: 360, height: 640, deviceScaleFactor: 1, mobile: true }, sessionId);
+await sleep(900);
+
+const foldState = await evalJs(`(() => {
+  const t = document.getElementById('btnSideToggle');
+  const style = getComputedStyle(t);
+  const r = el => { const b = el.getBoundingClientRect(); return {top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height)}; };
+  return {
+    toggleShown: style.display !== 'none',
+    toggleRect: r(t),
+    prepOpen: t.parentElement.classList.contains('prep-open'),
+    sectionsVisible: [...document.querySelectorAll('.side > section')]
+      .filter(s => getComputedStyle(s).display !== 'none').map(s => s.id || '(材料)'),
+    micRect: r(document.getElementById('btnMic')),
+    nextqRect: r(document.getElementById('nextq')),
+    innerH: window.innerHeight,
+    matDisplay: getComputedStyle(document.querySelector('.side > section')).display,
+  };
+})()`);
+check('手机上折叠把手可见', foldState.toggleShown, `高 ${foldState.toggleRect.h}px`);
+check('默认是收起的', foldState.prepOpen === false);
+check('收起时材料框不显示', foldState.matDisplay === 'none', foldState.matDisplay);
+check('收起时「说话」区还露着', foldState.sectionsVisible.includes('micSec'),
+  foldState.sectionsVisible.join(',') || '(一个都没有)');
+check('「开始说话」在首屏内',
+  foldState.micRect.top >= 0 && foldState.micRect.bottom <= foldState.innerH,
+  `top=${foldState.micRect.top} bottom=${foldState.micRect.bottom} / 视口 ${foldState.innerH}`);
+check('「下一个问题」在首屏内',
+  foldState.nextqRect.top >= 0 && foldState.nextqRect.top < foldState.innerH,
+  `top=${foldState.nextqRect.top}`);
+/* 手机上「下一个问题」必须在整个准备区**前面**：
+   面试进行中该一直盯的是题，材料和设置是准备动作。
+   这一条对应 CSS 里的 .stream{order:1} / .side{order:2}，
+   把顺序写在断言里，以后谁调 CSS 调反了会立刻红。 */
+check('手机上题目面板在准备区上面',
+  foldState.nextqRect.top < foldState.micRect.top,
+  `nextq ${foldState.nextqRect.top} / mic ${foldState.micRect.top}`);
+
+await evalJs('document.getElementById("btnSideToggle").click()');
+await sleep(600);
+const openState = await evalJs(`(() => {
+  const t = document.getElementById('btnSideToggle');
+  const sec = document.querySelector('.side > section');
+  return {
+    prepOpen: t.parentElement.classList.contains('prep-open'),
+    matDisplay: getComputedStyle(sec).display,
+    label: document.getElementById('sideToggleLabel').textContent,
+  };
+})()`);
+check('点把手能展开', openState.prepOpen === true, openState.label);
+check('展开后材料框出现', openState.matDisplay !== 'none', openState.matDisplay);
+await evalJs('document.getElementById("btnSideToggle").click()');
+await sleep(500);
+check('再点一次能收起',
+  await evalJs('!document.getElementById("btnSideToggle").parentElement.classList.contains("prep-open")'));
+
+await send('Emulation.setDeviceMetricsOverride',
+  { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+await sleep(700);
+check('桌面上折叠把手不出现',
+  await evalJs('getComputedStyle(document.getElementById("btnSideToggle")).display === "none"'));
+check('桌面上侧栏常开（材料框一直看得见）',
+  await evalJs('getComputedStyle(document.querySelector(".side > section")).display !== "none"'));
+await send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
+await sleep(400);
+
 /* ══ 麦克风：真浏览器 + 假麦克风设备 ══════════════════════════════════
    这一段是整个「接语音」改动里最容易自欺的地方：
    服务端的 ASR 链路可以用 WAV 文件单独验证（.run/probe_asr_e2e.mjs），
@@ -572,6 +661,147 @@ check('标了这场有多少句对话', loaded.saysCount);
 await evalJs('document.getElementById("btnHistClose").click()');
 await sleep(300);
 check('历史弹层能关掉', await evalJs('document.getElementById("histWrap").style.display === "none"'));
+
+/* ══ 开新的一场：从界面点进去走完整条路 ══════════════════════════════
+   这条链路最容易错的地方全在浏览器这一侧，服务端反而是简单的：
+     · 点「开新的一场」要弹出命名框，且预填一个能用的默认名字
+     · 确认之后 SESSION 要换掉、地址栏要跟着换
+     · ★ EventSource 必须重连。不重连的话它还钉在旧场上，
+       页面上一题不出、而服务端的 chunks 数在涨——这个坑非常难猜。
+     · 面板要清空（新的一场不该还挂着上一场的题）
+     · 旧场要带着名字出现在历史里，而且内容一句不少
+   所以这一段必须用真浏览器跑，光测端点（.run/probe_newsession.mjs）
+   测不到上面任何一条。 */
+console.log('\n═══ 开新的一场（界面）═══');
+
+/* ⚠️ 先跳到一场专门给这段用的空场次上。
+   不这么做的话，「开新的一场」会把**用户当前那场**（通常是 default）
+   改成探针名字，等于在人家库上动手。测自己的副作用要隔离。 */
+const RESET_PROBE = 'uireset_' + Date.now();
+await send('Page.navigate', { url: `${APP}/?s=${RESET_PROBE}` }, sessionId);
+await sleep(2200);
+
+/* 先往这一场里塞点内容，否则「旧场内容没丢」这条测的是"0 道题还在不在"，
+   恒等于真——第一版就是这么写的，报了个假的失败（其实那场本来就是空的）。
+   塞内容用接口最快，而且走的是和界面同一条路（addTurn + addLine）。 */
+await fetch(`${APP}/api/materials`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ session: RESET_PROBE, materials: '探针材料：个税 App，用 Redis 预减库存。', name: '探针材料' }),
+}).catch(() => {});
+await fetch(`${APP}/api/question`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ session: RESET_PROBE, question: '这一场是有内容的，重置之后它应该还在' }),
+}).catch(() => {});
+await sleep(900);
+
+const beforeReset = await evalJs(`(() => ({
+  session: new URL(location.href).searchParams.get('s'),
+  hasQs: document.getElementById('feed').innerText.length,
+}))()`);
+
+// 点「开新的一场」→ 弹层应该出现，并且预填了默认名字
+await evalJs('document.getElementById("btnReset").click()');
+await sleep(500);
+const modalState = await evalJs(`(() => {
+  const w = document.getElementById('newWrap');
+  const t = document.getElementById('newTitle');
+  return {
+    shown: getComputedStyle(w).display !== 'none',
+    prefill: t.value,
+    focused: document.activeElement === t,
+  };
+})()`);
+check('点「开新的一场」弹出命名框', modalState.shown);
+check('命名框预填了默认名字', !!modalState.prefill, modalState.prefill);
+
+const NEW_TITLE = '探针场次 ' + new Date().toISOString().slice(11, 19);
+await setVal('#newTitle', NEW_TITLE);
+await sleep(200);
+await evalJs('document.getElementById("btnNewGo").click()');
+await sleep(2500);
+
+const afterReset = await evalJs(`(() => {
+  const u = new URL(location.href);
+  return {
+    session: u.searchParams.get('s'),
+    modalHidden: getComputedStyle(document.getElementById('newWrap')).display === 'none',
+    feedEmpty: !document.getElementById('feed').innerText.includes('QPS') || document.getElementById('feed').innerText.length < 200,
+    nqText: document.getElementById('nqQ').textContent,
+    connText: document.getElementById('connPill').textContent,
+  };
+})()`);
+check('换场后地址栏带上了新 id',
+  !!afterReset.session && afterReset.session !== beforeReset.session,
+  `${beforeReset.session} → ${afterReset.session}`);
+check('命名框自动关掉', afterReset.modalHidden);
+check('面板被清空（新的一场是干净的）', afterReset.feedEmpty,
+  `feed ${await evalJs('document.getElementById("feed").innerText.length')} 字`);
+check('面板回到等待态', /等他说完|题目就会跟着来|开始了/.test(afterReset.nqText),
+  afterReset.nqText.slice(0, 30));
+
+/* ★ SSE 真的重连到新场了吗？
+   判据：从页面内部去读它连的是哪个 URL——不行，EventSource 不暴露 url
+   （其实是暴露的，但重连后的实例才是我们要的）。
+   更实在的判据是行为：往新场灌一段话，它必须能出新题。
+   SSE 还钉在旧场的话，服务端出了题页面也收不到（这正是要防的那个 bug）。 */
+console.log('  往新场灌一段话，验证新场真的活着…');
+await setVal('#replayText', '我用 Redis 做预减库存，然后发消息到 Kafka，下游异步落库。消息发失败就重试三次，进死信队列。');
+await sleep(300);
+await evalJs('document.getElementById("btnReplayOpen").click()');
+await sleep(300);
+await evalJs('document.getElementById("btnReplay").click()');
+
+let newQs = [];
+for (let i = 0; i < 60; i++) {
+  await sleep(500);
+  const api = await (await fetch(`${APP}/api/state?s=${afterReset.session}`)).json();
+  newQs = (api.history || []).map(h => h.question).filter(Boolean);
+  if (newQs.length >= 1) break;
+}
+await sleep(1200);
+const newBody = await evalJs('document.body.innerText');
+check('新场真的能出题（SSE 重连成功）', newQs.length > 0, `${newQs.length} 道`);
+check('新题出现在新场的页面上', newQs.some(q => newBody.includes(q.slice(0, 6))),
+  newQs.slice(0, 1).join(''));
+if (newQs.length) console.log(`    新场第一题：${newQs[0]}`);
+
+// 旧场必须带着名字、且内容完整地留在历史里
+await evalJs('document.getElementById("btnHist").click()');
+await sleep(1400);
+const histAfter = await evalJs(`(() => {
+  const items = [...document.querySelectorAll('#histWrap .hist-item')];
+  return items.map(it => ({
+    ttl: it.querySelector('.ttl').textContent,
+    meta: it.querySelector('.meta').textContent,
+  }));
+})()`);
+const renamed = histAfter.find(h => h.ttl === NEW_TITLE);
+check('旧场带着新名字留在历史里', !!renamed,
+  histAfter.map(h => h.ttl).slice(0, 4).join(' | '));
+check('旧场的内容没丢', !!renamed && /[1-9]\d*\s*句对话/.test(renamed.meta),
+  renamed ? renamed.meta : '(没找到)');
+
+/* 起名 / 删除按钮真的能用吗？
+   只验证接口存在是不够的——它们挂在动态生成的 .hist-item 里，
+   用事件委托时最容易漏的就是 dataset.act 的拼写和冒泡。 */
+const hasRename = await evalJs(
+  '!!document.querySelector("#histWrap .hist-item button[data-act=\\"rename\\"]")');
+const hasDel = await evalJs(
+  '!!document.querySelector("#histWrap .hist-item button[data-act=\\"del\\"]")');
+check('历史项上有「起名」按钮', hasRename);
+check('历史项上有「删除」按钮', hasDel);
+await evalJs('document.getElementById("btnHistClose").click()');
+await sleep(300);
+
+/* 收尾：把本段造出来的场次从库里删掉，别在用户的历史里越积越多。
+   删两场：HIST_SESSION（材料库那段造的）和刚开出来的新场。
+   旧场（原来的 SESSION）不是这脚本造的，不动它。 */
+for (const sid of [HIST_SESSION, afterReset.session, RESET_PROBE].filter(Boolean)) {
+  await fetch(`${APP}/api/sessions/delete`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: sid }),
+  }).catch(() => {});
+}
 
 /* 删掉自己造的那一场，别在用户库越积越多。
    只 reset 内存不够——材料库和历史面试读的是 SQLite。 */

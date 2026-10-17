@@ -36,3 +36,7 @@ Thumbs.db
 # 测试用音频：由 .run/make_tts.ps1 用 Windows 自带语音合成现场生成。
 # 一个 300KB 的二进制进公开仓库不划算，一条命令就能重造。
 .run/*.wav
+
+# 截图：调布局时用 .run/shot.mjs 拍，看一眼就扔，不留仓库
+.run/shot_*.png
+.run/_metrics.mjs

@@ -745,6 +745,26 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ ok: !!ok }));
     }
 
+    /* 给一场面试起名 / 改名。
+       名字是这个功能能不能被人用起来的关键：历史里躺着一串
+       `s1792154859667` 那种 id 谁都不想点开。改名走同一个接口——
+       刚开一场时命名和后来改名在数据层是同一件事（UPDATE title）。 */
+    if (p === '/api/sessions/rename' && req.method === 'POST') {
+      const body = await readBody(req);
+      const id = String(body.session || body.id || '').trim();
+      const title = String(body.title || '').trim().slice(0, 80);
+      if (!id) {
+        res.writeHead(400, { 'Content-Type': MIME['.json'] });
+        return res.end(JSON.stringify({ ok: false, error: '缺少 session' }));
+      }
+      const r = dbWrite(st => st.ensureSession(id, null, title || null), 'ensureSession');
+      // 内存里那份也同步，否则同一进程里再读 /api/state 还是旧标题
+      const live = sessions.get(id);
+      if (live) live.title = title || null;
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, id, title, session: r?.session || null }));
+    }
+
     /* ── 换模型配置 ── */
     if (p === '/api/config' && req.method === 'POST') {
       const body = await readBody(req);
@@ -767,18 +787,19 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify(s.judge.summary(), null, 2));
     }
 
-    /* ── 重置一场面试 ──
-       ⚠️ 只清内存、不删库。这是刻意的：点了「重置」之后重新打开页面，
-       上一场的内容还能从库里恢复回来——「重置」是"这一场重新开始"，
-       不是"把历史抹掉"。真要删历史，走 /api/sessions/delete。
+    /* ── 重置 = 结束这一场，开一场新的 ──
+       ⚠️ 只清内存、不删库。这是刻意的：点了「重置」之后这一场仍然能在
+       「历史面试」里找到、能加载回来。重置是"这一场已经结束了，我要开始
+       下一场"，不是"把历史抹掉"。真要删历史，走 /api/sessions/delete。
 
-       但要注意：重置时如果库里还有这一场的记录，重新 getSession 时
-       hydrate 会把 asked/history 又拉回来，看起来像"重置没生效"。
-       所以这里把会话 id 加上时间戳后缀，让新一轮写到一个新 id 上——
-       历史因此可以保留，新一轮也不会背着旧记忆。 */
+       返回体里给出建议的新会话 id（`next`）：前端拿到之后会带上它重连，
+       于是新一轮的录音、切片、出题全部写到一个干净的 id 上，旧场的
+       asked/history 不会跟着背过来。名字（title）如果传了就顺手存到
+       【旧场】上——人是在结束这一场的时候给它起名的，很直觉。 */
     if (p === '/api/reset' && req.method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       const id = body.session || url.searchParams.get('s') || 'default';
+      const title = String(body.title || '').trim().slice(0, 80);
       const old = sessions.get(id);
       if (old) {
         // 重置时要把两路识别都关掉，否则那两条 WebSocket 会一直挂着
@@ -786,9 +807,27 @@ const server = http.createServer(async (req, res) => {
         for (const role of ['candidate', 'interviewer']) await stopAsr(old, role);
         for (const r of old.clients) { try { r.end(); } catch (_) {} }
       }
+      // 给刚结束的这场起名。库里有行就改行；没有行先建一行再起名。
+      if (title) dbWrite(st => st.ensureSession(id, null, title), 'ensureSession');
       sessions.delete(id);
+
+      // 新一场的 id：时间戳，一眼能看出先后顺序，也不会和旧场撞。
+      const next = `s${Date.now()}`;
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true, session: id }));
+      return res.end(JSON.stringify({ ok: true, session: id, ended: id, next, title: title || null }));
+    }
+
+    /* ── 开一场新的：只发一个新 id，不动旧场（旧场原样留在历史里）──
+       /api/reset 会顺手把旧场从内存里删掉并关麦克风，适合"这一场跑完了"；
+       这个端点则完全不动旧场，适合"我要另起一面，原来那面还想留着继续"。 */
+    if (p === '/api/sessions/new' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
+      const next = String(body.id || '').trim() || `s${Date.now()}`;
+      const title = String(body.title || '').trim().slice(0, 80);
+      if (title) dbWrite(st => st.ensureSession(next, null, title), 'ensureSession');
+      else dbWrite(st => st.ensureSession(next), 'ensureSession');
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, session: next, title: title || null }));
     }
 
     /* ── 静态文件 ── */
