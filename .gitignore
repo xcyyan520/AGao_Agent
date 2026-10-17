@@ -1,5 +1,12 @@
 # 运行时产物，别进仓库
 
+# ⚠️ 数据库：里面是真实候选人的逐字稿、AI 出的题、聊过的内容。
+# 这个仓库是公开的，绝对不能提交。WAL/SHM 是 SQLite 的伴生文件，同样含数据。
+data/
+*.db
+*.db-wal
+*.db-shm
+
 # 日志与临时输出
 .run/*.log
 .run/*.err
@@ -11,6 +18,11 @@
 # 进程/端口相关的一次性脚本产物
 .run/server_real.log
 .run/server_real.err.log
+
+# 测试留下的临时数据库（.run/ 下的探针会造 _t.db 之类）
+.run/*.db
+.run/*.db-wal
+.run/*.db-shm
 
 # 编辑器 / 系统
 .DS_Store

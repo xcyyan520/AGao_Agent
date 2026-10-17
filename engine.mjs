@@ -398,6 +398,12 @@ export class IncrementalQuestioner extends EventEmitter {
     //   面试官屏幕上连着滚出 19 遍同一句话，这功能看着就是坏的。
     this.suggested = [];          // AI 自己给过的建议，纯追加，用于防重复
     this._suggestedKeys = new Set();   // 上面那个列表的归一化去重键
+    // 以前几场面试里问过的问题。跟 asked 的区别是：asked 是【这一场】，
+    // 这个是【历史上所有场】。它让 AI 第二次面同一个候选人时不会把
+    // 上一场已经问透的东西再问一遍。
+    // 只存进提示词、不进 asked，因为它不是"本场已经问过"，
+    // 混进去会让模型以为这一场已经进行到很后面了。
+    this.priorAsked = [];
     this.answer = '';             // 本次回答到目前为止
     this.history = [];            // 已应用的结果，供回看
     this.busy = false;
@@ -412,6 +418,80 @@ export class IncrementalQuestioner extends EventEmitter {
   setContext({ materials, currentQuestion } = {}) {
     if (materials !== undefined) this.materials = materials;
     if (currentQuestion !== undefined) this.currentQuestion = currentQuestion;
+  }
+
+  /**
+   * 设置「以前几场问过的问题」，让模型知道哪些话题已经聊过了。
+   *
+   * 为什么只喂最近 PAST_ASKED_KEEP 条：完整的历史可能有几百条，
+   * 全塞进去既贵又会把模型的注意力从「他刚说的这句」拉走。
+   * 最近若干条已经够它避开重复。
+   *
+   * 注意它和 suggested 一样，**必须放在最后一条 user 消息里**，
+   * 不能进稳定前缀——否则每开一场面试就把前缀缓存全打掉。
+   */
+  setPriorAsked(list) {
+    if (!Array.isArray(list)) return;
+    const seen = new Set();
+    const out = [];
+    for (const q of list) {
+      const t = String(q || '').trim();
+      if (!t || seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+    this.priorAsked = out.slice(-PAST_ASKED_KEEP);
+  }
+
+  /**
+   * 从存下来的状态恢复一场面试。
+   *
+   * 为什么需要这个方法：在没有它之前，整个引擎是纯内存的，`server.mjs`
+   * 重启、或者页面带着新的 ?s= 打开，一切从零开始。用户的原话是
+   * 「没历史消息，AI 是不是就不记得之前面试过的内容」——是的，而且
+   * 连**同一场**面试都记不住。
+   *
+   * 恢复三样东西（都是纯追加的列表，恢复起来没有一致性风险）：
+   *   - asked        面试官真问出口的问题 → 模型据此知道自己问到哪了
+   *   - suggested    AI 给过的建议         → 防重复的那道防线要重新立起来
+   *   - history      已应用的出题结果     → 页面上的日志能接着往下滚
+   *
+   * **不恢复** answer：候选人的回答是逐块累积的滑动窗口，存了整个
+   * `answerLimit` 窗口也没意义——恢复后他继续说的新内容会自然填进来。
+   * 硬塞一段旧的反而会让模型把「上一场最后说的话」当成「这一场刚说的」。
+   *
+   * @param {{asked?:string[], suggested?:string[], history?:object[]}} state
+   */
+  hydrate(state = {}) {
+    const { asked, suggested, history } = state;
+
+    if (Array.isArray(asked)) {
+      for (const q of asked) {
+        const t = String(q || '').trim();
+        if (t && !this.asked.includes(t)) this.asked.push(t);
+      }
+    }
+
+    if (Array.isArray(suggested)) {
+      for (const q of suggested) this._remember(q);
+    }
+
+    if (Array.isArray(history)) {
+      for (const r of history) {
+        if (!r || !r.question) continue;
+        // 按 seq 去重：同一个块恢复两次不该在日志里出现两行。
+        if (this.history.some(x => x.seq === r.seq && x.question === r.question)) continue;
+        this.history.push(r);
+        if (typeof r.seq === 'number' && r.seq > this.appliedSeq) this.appliedSeq = r.seq;
+      }
+    }
+
+    // 块号要从恢复出来的最高值接着往下发，否则新块会撞上旧 seq，
+    // 触发 `item.seq <= this.appliedSeq` 那条乱序丢弃分支，新题全被丢掉。
+    const maxSeq = this.history.reduce((m, r) => Math.max(m, Number(r.seq) || 0), -1);
+    if (maxSeq >= this.seq) this.seq = maxSeq;
+
+    this.emit('hydrated', { asked: this.asked.length, suggested: this.suggested.length, history: this.history.length });
   }
 
   /**
@@ -557,6 +637,14 @@ export class IncrementalQuestioner extends EventEmitter {
         `${recent.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n`
       : '';
 
+    // 历史场次问过的问题。措辞上刻意和上面的「已经问过的问题」区分开：
+    // 那个是【本场】，这个是【以前几场】。如果不区分，模型会以为本次面试
+    // 已经进行到了很后面，出题节奏会乱。
+    const priorBlock = this.priorAsked.length
+      ? `## 以前几场面试问过的问题（尽量避免重复；如果这场的回答确实暴露出新的信息缺口，可以换个角度重问）\n\n` +
+        `${this.priorAsked.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n`
+      : '';
+
     return [
       { role: 'system', content: sys },
       { role: 'user', content: askedBlock },
@@ -565,6 +653,7 @@ export class IncrementalQuestioner extends EventEmitter {
         content:
           `## 候选人到目前为止的回答\n\n${this.answer || '（他还没开口）'}\n\n` +
           `## 刚听到的一块（第 ${item.seq} 块）\n\n${item.text}\n\n` +
+          priorBlock +
           suggestedBlock +
           `现在给出面试官下一个该问的问题。只输出那四行。`,
       },
@@ -680,6 +769,12 @@ export class IncrementalQuestioner extends EventEmitter {
 
 /** 兼容旧名字：早期调用点还写着 IncrementalJudge */
 export const IncrementalJudge = IncrementalQuestioner;
+
+/**
+ * 往提示词里喂多少条「以前几场问过的问题」。
+ * 40 条大约 600~900 字，够覆盖两三次面试的提问轨迹，又不至于喧宾夺主。
+ */
+const PAST_ASKED_KEEP = 40;
 
 /* ══════════════════════════════════════════════════════════════════════
  * 输出容错：LLM 经常不守规矩（多写一句、少一行、写成中文冒号）

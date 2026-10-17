@@ -32,6 +32,15 @@
   /* 空状态的 pill 不显示：否则页头会挂着两个光秃秃的「—」，
      在窄屏上还会把标题挤到第二行。有内容时才让它出现。 */
   .pill:empty{display:none}
+  /* 模型 pill 里装的是「模型名 @ 完整 baseUrl」，字符串很长。
+     不限宽的话，它在 360px 的手机上会自己换行折成两行（实测 332×41），
+     把整个 header 撑到 184px 高——连带 .stream 只剩 187px 可用高度，
+     内容溢出画到侧栏上，把「记录并提问」盖住（实测被 #btnMatLib 遮挡）。
+     这里强制单行 + 省略号，把它压回 24px 一行。 */
+  #modelPill{
+    max-width:min(260px, 46vw); overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; vertical-align:middle;
+  }
   .grow{flex:1}
   button{
     background:var(--panel2); color:var(--fg); border:1px solid var(--line);
@@ -43,6 +52,66 @@
   button.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500}
   button.primary:hover:not(:disabled){background:#1f6feb}
   button.danger{color:var(--err); border-color:#4d2426}
+  /* 小号按钮：塞在 h2 里或列表项里，不能把行高撑开 */
+  button.mini{
+    padding:1px 7px; font-size:11px; border-radius:4px; font-weight:400;
+    text-transform:none; letter-spacing:0;
+  }
+  .side h2 button.mini{float:right; margin-top:-2px}
+
+  /* ── 材料库 ──
+     侧栏只有 320px 宽，列表必须能滚，不能把整条侧栏撑长。
+     max-height 卡在 180px：够看见四五份材料，再多就滚。 */
+  .lib{
+    margin-top:8px; border:1px solid var(--line); border-radius:6px;
+    background:var(--bg); overflow:hidden;
+  }
+  .lib-head{
+    display:flex; align-items:center; gap:8px; padding:6px 8px;
+    font-size:11px; color:var(--dim); border-bottom:1px solid var(--line);
+  }
+  .lib-head span{flex:1}
+  .lib-list{max-height:180px; overflow-y:auto}
+  .lib-item{
+    padding:7px 8px; border-bottom:1px solid var(--line); cursor:pointer;
+    font-size:12px; display:flex; align-items:center; gap:8px;
+  }
+  .lib-item:last-child{border-bottom:none}
+  .lib-item:hover{background:var(--panel2)}
+  .lib-item .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lib-item .ch{font-size:11px; color:var(--dim2)}
+  .lib-item .del{
+    font-size:11px; color:var(--dim2); padding:0 4px; border-radius:3px; flex:0 0 auto;
+  }
+  .lib-item .del:hover{color:var(--err); background:#2a1a1c}
+  .lib-empty{padding:10px 8px; font-size:12px; color:var(--dim2)}
+
+  /* ── 弹层（历史面试）──
+     手机上也用它，所以宽度用 min() 卡住，不能写死像素。 */
+  .modal{
+    position:fixed; inset:0; background:rgba(0,0,0,.62); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+    backdrop-filter:blur(2px);
+  }
+  .modal-box{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    width:min(560px,100%); max-height:80vh; display:flex; flex-direction:column;
+    box-shadow:0 16px 48px rgba(0,0,0,.55); overflow:hidden;
+  }
+  .modal-head{
+    display:flex; align-items:center; gap:8px; padding:10px 12px;
+    border-bottom:1px solid var(--line);
+  }
+  .modal-head h2{font-size:13px; margin:0; flex:1; font-weight:600}
+  .modal-foot{padding:8px 12px; border-top:1px solid var(--line); display:flex; gap:8px; align-items:center}
+  .hist-item{padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer}
+  .hist-item:hover{background:var(--panel2)}
+  .hist-item .top{display:flex; align-items:baseline; gap:8px; margin-bottom:3px}
+  .hist-item .ttl{flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .hist-item .when{font-size:11px; color:var(--dim2); flex:0 0 auto}
+  .hist-item .meta{font-size:11px; color:var(--dim2); display:flex; gap:10px; flex-wrap:wrap}
+  .hist-item .qs{margin-top:5px; font-size:12px; color:var(--dim); line-height:1.5}
+  .hist-item .qs div{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
   main{flex:1; display:flex; min-height:0}
 
@@ -166,6 +235,23 @@
        回放控件才看得到题——那"尽早"两个字就白写了。 */
     .stream{order:1}
     .side{order:2}
+
+    /* .stream 里的 .feed 自己会滚，但 .nextq / .qbar / .stats 是定高。
+       如果 .stream 的盒子比这几块之和小，它们会溢出画到下面的 .side 上
+       （实测 360×640 下 .stream 拿到 187px 却要装 307px，溢出的 120px
+       正好盖住 .side 顶部的「材料库」按钮，把「记录并提问」挡死）。
+       overflow:hidden 在这里是兜底：宁可切掉也不能让两块内容叠在一起。 */
+    .stream{overflow:hidden}
+
+    /* 窄屏上页头要省着用。实测 360px 宽时 header 一开始占 184px（五行），
+       压掉 modelPill 和 padding 之后是 131px（三行）。
+       模型名不是每分钟都要看的东西——设置面板里有完整值，这里只留图标性的
+       提示，把高度还给「下一个问题」。 */
+    header{padding:7px 10px; gap:8px}
+    header h1{font-size:13px}
+    #modelPill{display:none}
+    .nextq{margin:8px 10px 0; padding:9px 11px}
+    .qbar{padding:7px 10px}
   }
 </style>
 </head>
@@ -178,9 +264,25 @@
   <div class="grow"></div>
   <span class="pill" id="progPill" title="AI 根据他说的话出了几次题。次数追上块数就说明跟得上"></span>
   <button id="btnSettings">⚙ 设置</button>
+  <button id="btnHist">历史面试</button>
   <button id="btnSummary">导出复盘</button>
   <button id="btnReset" class="danger">重置</button>
 </header>
+
+<!-- 历史面试：以前面过几场、每场出了哪些题。
+     这是「AI 记得你之前面过」的可见部分——不然那个记忆是黑盒的。 -->
+<div id="histWrap" class="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>历史面试</h2>
+      <button id="btnHistClose" class="mini">关闭</button>
+    </div>
+    <div id="histList" class="lib-list" style="max-height:60vh">加载中…</div>
+    <div class="modal-foot">
+      <span id="histStat" class="pill"></span>
+    </div>
+  </div>
+</div>
 
 <main>
   <aside class="side">
@@ -192,9 +294,20 @@
          现在改成 flex:1 1 auto + min-height（按内容算出的下限），配合 .side
          的 overflow-y:auto：够高就撑满，不够高就整条滚动，绝不重叠。 -->
     <section style="flex:1 1 auto; min-height:236px">
-      <h2>面试材料（出题的依据）</h2>
+      <h2>面试材料（出题的依据）
+        <button id="btnMatLib" class="mini" title="从存过的材料里挑一份，不用再粘一次">材料库</button>
+      </h2>
       <textarea id="materials" style="flex:1 1 auto; min-height:120px"
         placeholder="把候选人的逐字稿、项目资料粘进来。&#10;&#10;AI 出题的依据就是这里。&#10;不填的话它只能顺着他的话表面往下问，问不到『和他自己材料对不上』这类最有价值的地方。"></textarea>
+      <!-- 材料库：解决「每次都要自己复制粘贴」。
+           默认收起来，不占本来就不宽的侧栏。 -->
+      <div id="matLib" class="lib" style="display:none">
+        <div class="lib-head">
+          <span>存的材料（点一下装载）</span>
+          <button id="btnMatLibClose" class="mini">收起</button>
+        </div>
+        <div id="matLibList" class="lib-list">加载中…</div>
+      </div>
       <div class="row mt" style="flex:0 0 auto">
         <button id="btnSaveMat">保存材料</button>
         <span class="pill" id="matStat">0 字</span>
@@ -629,15 +742,154 @@ async function refreshState(){
   }catch(_){}
 }
 
+/* ── 材料库 ──
+   解决「每次都要自己复制粘贴」。材料存在服务端的 SQLite 里，
+   换台设备、换个浏览器都还在。 */
+async function loadMatLib(){
+  const list = $('matLibList');
+  list.textContent = '加载中…';
+  try{
+    const j = await (await fetch('/api/materials/list')).json();
+    const items = j.items || [];
+    if(!items.length){
+      list.innerHTML = '<div class="lib-empty">还没有存过材料。把内容粘到上面，点「保存材料」。</div>';
+      return;
+    }
+    list.innerHTML = '';
+    for(const m of items){
+      const d = document.createElement('div');
+      d.className = 'lib-item';
+      d.innerHTML =
+        `<span class="nm" title="${esc(m.name)}">${esc(m.name)}</span>` +
+        `<span class="ch">${m.chars} 字</span>` +
+        `<span class="del" title="从材料库删掉">✕</span>`;
+      // 点名字 = 装载到当前会话（不覆盖文本框以外的任何状态）
+      d.querySelector('.nm').onclick = () => useMaterial(m.id, m.name);
+      d.onclick = e => { if(e.target.classList.contains('nm')) return; useMaterial(m.id, m.name); };
+      d.querySelector('.del').onclick = async e => {
+        e.stopPropagation();
+        if(!confirm(`从材料库删掉「${m.name}」？\n（不影响正在进行的这场面试）`)) return;
+        await fetch('/api/materials/delete', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ id: m.id })
+        });
+        loadMatLib();
+      };
+      list.appendChild(d);
+    }
+  }catch(e){
+    list.innerHTML = '<div class="lib-empty">材料库读不出来，服务可能没起。</div>';
+  }
+}
+
+async function useMaterial(id, name){
+  const r = await fetch('/api/materials/use', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session:SESSION, id })
+  });
+  const j = await r.json();
+  if(!j.ok) return flash('装载失败：' + (j.error || '未知原因'));
+  // 把正文拉回来填进文本框，让人看得见到底装了哪份。
+  const g = await (await fetch('/api/materials/get?id=' + id)).json();
+  $('materials').value = g.material.text;
+  $('matStat').textContent = j.chars + ' 字';
+  $('matLib').style.display = 'none';
+  flash(`已装载「${name}」`);
+}
+
+$('btnMatLib').onclick = () => {
+  const el = $('matLib');
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if(!open) loadMatLib();
+};
+$('btnMatLibClose').onclick = () => { $('matLib').style.display = 'none'; };
+
+/* ── 历史面试 ──
+   以前面过几场、每场出了哪些题。这一层存在的理由不只是「回顾」：
+   跨场记忆需要让人能看见、能管理。看不到的记忆等于没有。 */
+async function loadHist(){
+  const list = $('histList');
+  list.textContent = '加载中…';
+  try{
+    const j = await (await fetch('/api/sessions?limit=30')).json();
+    // 这里**不能把当前场次过滤掉**。试过，结果是：只有一个会话的人在
+    // 「历史面试」里看到一片空白，会以为这个功能坏了。把本场也列出来、
+    // 带上「本场」标记，既说明它是什么，也不藏东西。
+    const items = j.items || [];
+    if(!items.length){
+      list.innerHTML = '<div class="lib-empty">还没有面试记录。这场跑起来之后就会出现在这里。</div>';
+      return;
+    }
+    list.innerHTML = '';
+    let totalQ = 0;
+    for(const s of items){
+      totalQ += s.suggestions || 0;
+      const d = document.createElement('div');
+      d.className = 'hist-item';
+      const when = new Date(s.updated_at || s.started_at).toLocaleString('zh-CN', {
+        month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+      });
+      const ttl = s.title || s.material_name || s.id;
+      const isCur = s.id === SESSION;
+      d.innerHTML =
+        `<div class="top"><span class="ttl" title="${esc(String(ttl))}">${esc(String(ttl))}</span>` +
+        (isCur ? `<span class="pill live">本场</span>` : '') +
+        `<span class="when">${esc(when)}</span></div>` +
+        `<div class="meta"><span>${s.suggestions || 0} 道题</span>` +
+        `<span>${s.turns || 0} 次提问</span>` +
+        (s.material_name ? `<span>材料：${esc(s.material_name)}</span>` : '') +
+        `</div><div class="qs">点一下展开这一场出过的题</div>`;
+      // 展开才拉题目列表：30 场一次性全拉会把接口拖慢
+      d.onclick = async () => {
+        const qs = d.querySelector('.qs');
+        if(d.dataset.open === '1'){
+          qs.innerHTML = '点一下展开这一场出过的题';
+          d.dataset.open = '0';
+          return;
+        }
+        d.dataset.open = '1';
+        try{
+          const g = await (await fetch('/api/sessions/get?id=' + encodeURIComponent(s.id))).json();
+          // 只显示真有文字的那些，空题（格式崩了）不占行
+          const list2 = (g.suggestions || []).filter(r => r.question);
+          qs.innerHTML = list2.length
+            ? list2.map(r => `<div>· ${esc(r.question)}</div>`).join('')
+            : '<div>（这场没有记录到题目）</div>';
+        }catch(e){ qs.innerHTML = '<div>读取失败</div>'; }
+      };
+      list.appendChild(d);
+    }
+    $('histStat').textContent = `共 ${items.length} 场 · ${totalQ} 道题`;
+  }catch(e){
+    list.innerHTML = '<div class="lib-empty">读不出来，服务可能没起。</div>';
+  }
+}
+
+$('btnHist').onclick = () => { $('histWrap').style.display = 'flex'; loadHist(); };
+$('btnHistClose').onclick = () => { $('histWrap').style.display = 'none'; };
+$('histWrap').onclick = e => { if(e.target.id === 'histWrap') $('histWrap').style.display = 'none'; };
+
 /* ── 交互 ── */
 $('btnSaveMat').onclick = async () => {
+  const text = $('materials').value;
+  // 名字默认取内容里第一个像标题的行，取不到就用时间。
+  // 让材料库里的条目自己说得清是什么，比一排「未命名材料」有用得多。
+  //
+  // 注意：这里**不用 prompt()**。两个理由：
+  //   1) 手机浏览器上 prompt 弹的是地址栏那种小框，中文输入法常被吞；
+  //   2) 无头 Chrome 里 prompt 直接挂死（没有 dialog 处理器时页面永久阻塞），
+  //      整条界面自动化检查会卡在这里。
+  // 名字直接取自内容的第一行标题——想改名就改材料的第一行，所见即所得。
+  const firstLine = (text.split('\n').find(l => l.trim()) || '').replace(/^#+\s*/, '').trim();
+  const name = firstLine.slice(0, 30) || ('材料 ' + new Date().toLocaleString('zh-CN'));
   const r = await fetch('/api/materials', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ session:SESSION, materials:$('materials').value })
+    body: JSON.stringify({ session:SESSION, materials:text, name })
   });
   const j = await r.json();
   $('matStat').textContent = j.chars + ' 字';
-  flash('材料已保存，之后的出题会以它为依据');
+  flash(`已保存到材料库「${name}」，下次不用再粘`);
 };
 
 $('materials').addEventListener('input', e => {
@@ -726,7 +978,33 @@ $('btnSaveCfg').onclick = async () => {
     $('cfgBase').value = s.conf.baseUrl;
     $('cfgModel').value = s.conf.model;
     $('modelPill').textContent = s.conf.model + ' @ ' + s.conf.baseUrl.replace(/^https?:\/\//,'');
-    $('matStat').textContent = '0 字';
+
+    /* 材料不再写死成「0 字」。
+       以前这里硬写 '0 字'，于是服务重启、页面刷新之后，材料明明已经在
+       服务端内存里、AI 也还在拿它出题，界面却显示「0 字」——看起来像材料
+       丢了，人就会再粘一遍。现在按实际装载情况显示。 */
+    let matLabel = '0 字';
+    if(s.persisted && s.persisted.materialId){
+      // 这一场挂着一份存过的材料：把正文拉回来填进框里
+      try{
+        const g = await (await fetch('/api/materials/get?id=' + s.persisted.materialId)).json();
+        if(g.material){
+          $('materials').value = g.material.text;
+          matLabel = g.material.chars + ' 字 · 已恢复';
+        }
+      }catch(_){}
+    }
+    $('matStat').textContent = matLabel;
+
+    /* 告诉用户在跨场记忆里有多少东西。
+       这个数不显眼，但它是「AI 记得你之前面过」的唯一可见证据——
+       没有它，人只能靠感觉猜这个功能到底有没有生效。 */
+    if(s.persisted && s.persisted.priorAsked > 0){
+      $('matStat').textContent += ` · 记得 ${s.persisted.priorAsked} 个旧问题`;
+    }
+    if(s.persisted && !s.persisted.enabled){
+      $('matStat').textContent += ' · 未落盘';
+    }
   }catch(e){
     $('connPill').textContent = '服务未启动';
     $('connPill').className = 'pill warn';

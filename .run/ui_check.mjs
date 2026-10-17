@@ -252,6 +252,79 @@ for (const [label, w, h] of [['桌面 1440', 1440, 900], ['手机 390', 390, 844
 }
 await send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
 
+/* ══ 持久化界面：材料库 + 历史面试 ══════════════════════════════════════
+   这两块是新加的，之前没有任何检查盯着。
+   检查的不是「按钮存在」，而是「点下去真的出现数据」——按钮存在但接口
+   404 的话，用户看到的是永远转圈的「加载中…」，比没有按钮更糟。        */
+console.log('\n═══ 材料库 / 历史面试 ═══');
+
+await evalJs('document.getElementById("btnMatLib").click()');
+await sleep(700);
+const lib = await evalJs(`(() => {
+  const el = document.getElementById('matLib');
+  const items = el.querySelectorAll('.lib-item');
+  const empty = el.querySelector('.lib-empty');
+  return {
+    open: el.style.display !== 'none',
+    n: items.length,
+    empty: empty ? empty.textContent : '',
+    first: items.length ? items[0].querySelector('.nm').textContent : '',
+    chars: items.length ? items[0].querySelector('.ch').textContent : ''
+  };
+})()`);
+check('材料库能展开', lib.open);
+check('材料库里有存过的材料', lib.n > 0, `空态 "${lib.empty}"` || `${lib.n} 份`);
+check('材料名不是空的', !!(lib.first && lib.first.trim()), lib.first);
+check('材料带字数', /\d+\s*字/.test(lib.chars || ''), lib.chars);
+
+// 点一下装载：文本框要被填满、字数要显示出来
+await evalJs(`(() => {
+  const it = document.querySelector('#matLib .lib-item .nm');
+  if (it) it.click();
+})()`);
+await sleep(900);
+const used = await evalJs(`({
+  chars: document.getElementById('matStat').textContent,
+  textLen: document.getElementById('materials').value.length,
+  closed: document.getElementById('matLib').style.display === 'none'
+})`);
+check('点材料能装载进文本框', used.textLen > 0, `textarea ${used.textLen} 字`);
+check('装载后字数对得上', /\d+\s*字/.test(used.chars), used.chars);
+check('装载后材料库自动收起', used.closed);
+
+await evalJs('document.getElementById("btnHist").click()');
+await sleep(800);
+const hist = await evalJs(`(() => {
+  const w = document.getElementById('histWrap');
+  const items = w.querySelectorAll('.hist-item');
+  return {
+    open: w.style.display !== 'none',
+    n: items.length,
+    stat: document.getElementById('histStat').textContent,
+    empty: (w.querySelector('.lib-empty') || {}).textContent || ''
+  };
+})()`);
+check('历史面试弹层能打开', hist.open);
+check('历史里有别的场次', hist.n > 0, hist.empty || `${hist.n} 场`);
+check('底部统计有数字', /共\s*\d+\s*场/.test(hist.stat) || hist.n === 0, hist.stat);
+
+// 展开一场：要真的列出题目，不是一直「载入中…」
+await evalJs(`(() => { const it = document.querySelector('#histWrap .hist-item'); if (it) it.click(); })()`);
+await sleep(900);
+const expanded = await evalJs(`(() => {
+  const qs = document.querySelector('#histWrap .hist-item .qs');
+  if (!qs) return { none: true };
+  return { text: qs.innerText, loading: /载入中/.test(qs.innerText),
+           lines: qs.querySelectorAll('div').length };
+})()`);
+check('展开一场能看到题目列表', !expanded.none && !expanded.loading && expanded.lines > 0,
+  expanded.none ? '没有场次' : (expanded.loading ? '还是载入中' : `${expanded.lines} 行`));
+
+// 关掉弹层，别把后面的布局检查搅了
+await evalJs('document.getElementById("btnHistClose").click()');
+await sleep(300);
+check('历史弹层能关掉', await evalJs('document.getElementById("histWrap").style.display === "none"'));
+
 const failed = results.filter(r => !r.pass);
 console.log('\n' + '─'.repeat(60));
 console.log(`界面检查：${results.length - failed.length} 通过 / ${failed.length} 失败`);

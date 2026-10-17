@@ -1,0 +1,12 @@
+import { DatabaseSync } from 'node:sqlite';
+const db = new DatabaseSync(':memory:');
+db.exec(`CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT, n INTEGER)`);
+const ins = db.prepare('INSERT INTO t (v,n) VALUES (?,?)');
+console.log('run ->', JSON.stringify(ins.run('a', 1)));
+console.log('run ->', JSON.stringify(ins.run('b', 2)));
+console.log('all ->', JSON.stringify(db.prepare('SELECT * FROM t').all()));
+console.log('get ->', JSON.stringify(db.prepare('SELECT * FROM t WHERE id=?').get(2)));
+console.log('has .all/.get:', typeof db.prepare('SELECT 1').all, typeof db.prepare('SELECT 1').get);
+const r = db.prepare('INSERT INTO t (v,n) VALUES (?,?)').run('c', 3);
+console.log('lastInsertRowid:', r.lastInsertRowid, typeof r.lastInsertRowid);
+console.log('changes:', r.changes);

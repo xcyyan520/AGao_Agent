@@ -29,6 +29,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { IncrementalQuestioner, Chunker } from './engine.mjs';
+import { openStore } from './store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8900);
@@ -45,6 +46,33 @@ const CONF = {
 
 /* ── 一场面试 = 一个会话。目前只支持一个活跃会话（小组面试场景够用）。 ── */
 const sessions = new Map();
+
+/* ── 持久化 ──
+   为什么要有：以前所有状态都在这个 Map 里，重启服务 = 材料、问过的题、
+   出题历史全丢。用户的原话是「每次都要自己复制粘贴，而且没历史消息，
+   是不是 AI 就不会记得之前面试过的内容」——按当时的实现，确实如此，
+   而且连【同一场】面试都记不住。
+
+   用 SQLite（Node 24 内置 node:sqlite）而不是 MySQL，理由见 store.mjs 顶部：
+   这是个「面试前 5 分钟打开就得能用」的工具，多一个必须先启动的数据库
+   进程就多一个临场翻车的出口。数据量也小得用不上 MySQL 的任何能力。
+
+   存储失败绝不能让出题链路挂掉——所有写入都包在 try 里，丢了记录
+   比丢了面试好。 */
+let store = null;
+try {
+  store = openStore();
+  console.log('   数据：   ' + store.path);
+} catch (e) {
+  console.error('[store] 打开数据库失败，本次运行不落盘：', e.message);
+}
+
+/** 包一层：任何一次落盘失败都不该冒泡到 HTTP 处理器里。 */
+function dbWrite(fn, label) {
+  if (!store) return null;
+  try { return fn(store); }
+  catch (e) { console.error(`[store:${label}]`, e.message); return null; }
+}
 
 function newSession(id, conf = {}) {
   const s = {
@@ -64,10 +92,52 @@ function newSession(id, conf = {}) {
     // 而这时按钮已经被置灰，人根本猜不到是自己十几秒前点过停止。
     replaying: false,
     replayAbort: false,
+    hydrated: false,      // 这场是不是已经从库里恢复过了（避免每轮请求都恢复一次）
   };
 
   s.judge = new IncrementalQuestioner(s.conf);
   s.chunker = new Chunker();
+
+  /* ── 从库里恢复这一场 ──
+     恢复什么、为什么恢复这些、为什么不恢复回答，见 engine.mjs 的 hydrate()。
+     关键点：块号必须接着历史往下发，否则新块的 seq 会小于 appliedSeq，
+     被当成乱序结果整批丢掉，症状是「服务重启后一条题都不出」。 */
+  if (store) {
+    try {
+      const data = store.getSessionData(id);
+      if (data) {
+        if (data.session.material_id) {
+          const m = store.getMaterial(data.session.material_id);
+          if (m) s.judge.setContext({ materials: m.text });
+        }
+        s.judge.hydrate({
+          asked: data.turns.map(t => t.question).filter(Boolean),
+          suggested: data.suggestions.map(g => g.question).filter(Boolean),
+          history: data.suggestions
+            .filter(g => g.question)
+            .map(g => ({
+              seq: g.seq, text: '', at: g.at, ms: g.ms,
+              question: g.question, reason: g.reason, basis: g.basis, kind: g.kind,
+              restored: true,
+            })),
+        });
+      }
+      // 跨场记忆：这个人以前被问过什么。只喂面试官真问出口的（turns），
+      // 不喂 AI 建议但没采用的（suggestions），理由见 store.mjs 里的注释。
+      const prior = store.getAskedFromOtherSessions(id);
+      if (prior.length) s.judge.setPriorAsked(prior);
+      s.materialId = data?.session?.material_id ?? null;
+      // 库里没有这一场就建一行，否则后面 addTurn/addSuggestion 的
+      // 外键（ON DELETE CASCADE）会失败，静默丢记录。
+      if (!data) dbWrite(st => st.ensureSession(id), 'ensureSession');
+      s.hydrated = true;
+      if (data) {
+        console.log(`[hydrate] ${id}: ${data.turns.length} 问过 / ${data.suggestions.length} 建议 / ${prior.length} 跨场`);
+      }
+    } catch (e) {
+      console.error('[store:hydrate]', e.message);
+    }
+  }
 
   s.chunker.on('chunk', c => {
     send(s, 'chunk', { seq: null, text: c.text, reason: c.reason, at: c.at });
@@ -81,7 +151,12 @@ function newSession(id, conf = {}) {
   s.judge.on('draft', d => send(s, 'draft', d));
 
   // 整轮推理结束：补齐理由、类型、依据
-  s.judge.on('nextq', r => send(s, 'nextq', r));
+  s.judge.on('nextq', r => {
+    // 先落盘再推送。反过来的话页面已经显示了、库里却没有，
+    // 重启后这一条会凭空消失，复盘时对不上。
+    dbWrite(st => st.addSuggestion(s.id, r), 'addSuggestion');
+    send(s, 'nextq', r);
+  });
 
   s.judge.on('merged', m => send(s, 'merged', m));
 
@@ -234,6 +309,12 @@ const server = http.createServer(async (req, res) => {
         answer: s.judge.answer,
         stats: s.judge.stats,
         history: s.judge.history,
+        // 页面用它显示「已从库里恢复」和材料来源，别再让人以为刷新就丢。
+        persisted: {
+          enabled: !!store,
+          materialId: s.materialId ?? null,
+          priorAsked: s.judge.priorAsked.length,
+        },
       }));
     }
 
@@ -302,8 +383,12 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/question' && req.method === 'POST') {
       const body = await readBody(req);
       const s = getSession(body.session || 'default');
+      const q = String(body.question || '');
       s.chunker.flushNow('beforeQuestion');
-      await s.judge.newQuestion(String(body.question || ''));
+      // 先把它当成【上一题的结束】：候选人刚才那段话是对上一个问题的回答。
+      // 必须在 newQuestion 之前写，因为 newQuestion 会把 answer 清掉。
+      if (q.trim()) dbWrite(st => st.addTurn(s.id, q, s.judge.answer || null), 'addTurn');
+      await s.judge.newQuestion(q);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify({ ok: true }));
     }
@@ -312,9 +397,77 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/materials' && req.method === 'POST') {
       const body = await readBody(req);
       const s = getSession(body.session || 'default');
-      s.judge.setContext({ materials: String(body.materials || '') });
+      const text = String(body.materials || '');
+      s.judge.setContext({ materials: text });
+      // 名字留空就按会话 id 存，免得材料库里全叫「未命名材料」分不清。
+      if (text.trim()) {
+        const saved = dbWrite(
+          st => st.saveMaterial(String(body.name || '').trim() || `会话 ${s.id} 的材料`, text),
+          'saveMaterial'
+        );
+        if (saved) {
+          s.materialId = saved.id;
+          dbWrite(st => st.ensureSession(s.id, saved.id), 'ensureSession');
+        }
+      }
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true, chars: s.judge.materials.length }));
+      return res.end(JSON.stringify({ ok: true, chars: s.judge.materials.length, materialId: s.materialId ?? null }));
+    }
+
+    /* ── 材料库 ──
+       这是「每次都要自己复制粘贴」那个抱怨的直接解法。 */
+    if (p === '/api/materials/list') {
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, items: store ? store.listMaterials() : [] }));
+    }
+
+    if (p === '/api/materials/get') {
+      const id = Number(url.searchParams.get('id'));
+      const m = store ? store.getMaterial(id) : null;
+      if (!m) { res.writeHead(404, { 'Content-Type': MIME['.json'] }); return res.end(JSON.stringify({ error: '没有这份材料' })); }
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, material: m }));
+    }
+
+    /* 把材料库里的某一份装进当前会话。 */
+    if (p === '/api/materials/use' && req.method === 'POST') {
+      const body = await readBody(req);
+      const s = getSession(body.session || 'default');
+      const m = store ? store.getMaterial(Number(body.id)) : null;
+      if (!m) { res.writeHead(404, { 'Content-Type': MIME['.json'] }); return res.end(JSON.stringify({ error: '没有这份材料' })); }
+      s.judge.setContext({ materials: m.text });
+      s.materialId = m.id;
+      dbWrite(st => st.ensureSession(s.id, m.id), 'ensureSession');
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, chars: m.text.length, name: m.name }));
+    }
+
+    if (p === '/api/materials/delete' && req.method === 'POST') {
+      const body = await readBody(req);
+      const ok = dbWrite(st => st.deleteMaterial(Number(body.id)), 'deleteMaterial');
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: !!ok }));
+    }
+
+    /* ── 历史面试 ── */
+    if (p === '/api/sessions') {
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, items: store ? store.listSessions(Number(url.searchParams.get('limit')) || 50) : [] }));
+    }
+
+    if (p === '/api/sessions/get') {
+      const id = url.searchParams.get('id') || '';
+      const data = store ? store.getSessionData(id) : null;
+      if (!data) { res.writeHead(404, { 'Content-Type': MIME['.json'] }); return res.end(JSON.stringify({ error: '没有这场面试' })); }
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, ...data }));
+    }
+
+    if (p === '/api/sessions/delete' && req.method === 'POST') {
+      const body = await readBody(req);
+      const ok = dbWrite(st => st.deleteSession(String(body.id || '')), 'deleteSession');
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: !!ok }));
     }
 
     /* ── 换模型配置 ── */
@@ -339,6 +492,15 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify(s.judge.summary(), null, 2));
     }
 
+    /* ── 重置一场面试 ──
+       ⚠️ 只清内存、不删库。这是刻意的：点了「重置」之后重新打开页面，
+       上一场的内容还能从库里恢复回来——「重置」是"这一场重新开始"，
+       不是"把历史抹掉"。真要删历史，走 /api/sessions/delete。
+
+       但要注意：重置时如果库里还有这一场的记录，重新 getSession 时
+       hydrate 会把 asked/history 又拉回来，看起来像"重置没生效"。
+       所以这里把会话 id 加上时间戳后缀，让新一轮写到一个新 id 上——
+       历史因此可以保留，新一轮也不会背着旧记忆。 */
     if (p === '/api/reset' && req.method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       const id = body.session || url.searchParams.get('s') || 'default';
@@ -346,7 +508,7 @@ const server = http.createServer(async (req, res) => {
       if (old) for (const r of old.clients) { try { r.end(); } catch (_) {} }
       sessions.delete(id);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true }));
+      return res.end(JSON.stringify({ ok: true, session: id }));
     }
 
     /* ── 静态文件 ── */

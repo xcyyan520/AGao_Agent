@@ -434,6 +434,77 @@ console.log('\n\x1b[1m【11】重复判定：抓得住变体，也不误杀真�
 }
 
 /* ══════════════════════════════════════════════════════════════════════ */
+console.log('\n\x1b[1m【12】从库里恢复：重启后记忆不丢、块号不乱\x1b[0m');
+/* ══════════════════════════════════════════════════════════════════════ */
+{
+  /* 这一组测的是「服务重启 / 页面刷新之后，引擎还能接上」。
+     以前整个引擎是纯内存的，重启 = 全清，用户的原话是
+     「没历史消息，AI 是不是就不记得之前面试过的内容」。
+
+     三个必须恢复对的点，每个都对应一个真实的坏症状：
+       1. asked 丢了   → 新一场还会重复问本场已经问过的
+       2. suggested 丢了 → 防重复的防线倒了，开始复读自己给过的建议
+       3. seq 没接上    → 新块的 seq <= appliedSeq，被当成乱序整批丢掉，
+                          症状是「重启之后一条题都不出」，最难猜的一个 */
+
+  const q = new IncrementalQuestioner({ baseUrl: 'http://127.0.0.1:1', apiKey: 'x', model: 'x' });
+  q.on('error', () => {});        // 这一组不发请求，但保险
+
+  q.hydrate({
+    asked: ['先讲讲你的项目', '为什么要用 LangGraph'],
+    suggested: ['那 Redis 预减失败怎么办？', '那消息没落库怎么保证不丢？'],
+    history: [
+      { seq: 7, question: '那 Redis 预减失败怎么办？', reason: '他跳过了失败分支', kind: 'probe', ms: 900, at: 1 },
+      { seq: 9, question: '那消息没落库怎么保证不丢？', reason: '没讲可靠性', kind: 'probe', ms: 1100, at: 2 },
+    ],
+  });
+
+  ok('恢复后 asked 有两条', q.asked.length === 2, `asked=${JSON.stringify(q.asked)}`);
+  ok('恢复的 asked 顺序保持', q.asked[0] === '先讲讲你的项目');
+  ok('恢复后 suggested 有两条', q.suggested.length === 2);
+  ok('恢复后 history 有两条', q.history.length === 2);
+
+  // 块号必须接着历史的最大值走。9 是恢复出来的最大 seq，
+  // 下一个新块应该是 10 —— 如果还是从 1 开始，会被 appliedSeq(9) 判成乱序。
+  ok('appliedSeq 跟着恢复到了最大值', q.appliedSeq === 9, `appliedSeq=${q.appliedSeq}`);
+  // ⚠️ submit() 返回的是序号数字，不是 item 对象。
+  const seq = q.submit('他刚才说消息是先写 Redis 再落库');
+  ok('新块的 seq 接在历史之后', seq === 10, `seq=${seq}`);
+  ok('新块不会被判成乱序', seq > q.appliedSeq, `seq=${seq} appliedSeq=${q.appliedSeq}`);
+
+  // 恢复出来的建议要能让去重继续生效，否则重启一次就开始复读。
+  ok('恢复后重复判定仍然生效', q._isRepeat('那 Redis 预减失败怎么办？'));
+  ok('恢复后新题仍判为新', !q._isRepeat('那你们为什么不用 Kafka 的事务消息？'));
+
+  // 同一份状态恢复两次不能把列表搞重（页面会重连、服务会重建 session）。
+  q.hydrate({ asked: ['先讲讲你的项目'], history: [{ seq: 7, question: '那 Redis 预减失败怎么办？' }] });
+  ok('重复 hydrate 不会让 asked 变重', q.asked.length === 2, `asked=${q.asked.length}`);
+  ok('重复 hydrate 不会让 history 变重', q.history.length === 2, `history=${q.history.length}`);
+
+  // ── 跨场记忆 ──
+  const q2 = new IncrementalQuestioner({ baseUrl: 'http://127.0.0.1:1', apiKey: 'x', model: 'x' });
+  q2.setPriorAsked(['上一场问过 A', '上一场问过 B', '上一场问过 A']);   // 故意带重复
+  ok('跨场记忆去重', q2.priorAsked.length === 2, `priorAsked=${JSON.stringify(q2.priorAsked)}`);
+  ok('跨场记忆不进本场 asked', q2.asked.length === 0);
+
+  q2.setPriorAsked(Array.from({ length: 100 }, (_, i) => `历史题 ${i}`));
+  ok('跨场记忆只保留最近 40 条', q2.priorAsked.length === 40, `len=${q2.priorAsked.length}`);
+  ok('保留的是最近的那些（尾部）', q2.priorAsked[39] === '历史题 99', q2.priorAsked[39]);
+
+  // 跨场记忆必须进最后一条 user 消息，不能进稳定前缀——否则每场面试
+  // 都把系统提示词和"已问过"块的缓存全打掉。
+  const msgs = q2._buildMessages({ seq: 1, text: '他说了一段' });
+  const inPrefix = msgs[0].content.includes('以前几场') || msgs[1].content.includes('以前几场');
+  ok('跨场记忆没有进稳定前缀', !inPrefix);
+  ok('跨场记忆在最后一条 user 消息里', msgs[2].content.includes('以前几场'));
+
+  const empty = new IncrementalQuestioner({ baseUrl: 'http://127.0.0.1:1', apiKey: 'x', model: 'x' });
+  empty.setPriorAsked([]);
+  const m2 = empty._buildMessages({ seq: 1, text: 'x' });
+  ok('没有跨场记忆时不塞空块', !m2[2].content.includes('以前几场'));
+}
+
+/* ══════════════════════════════════════════════════════════════════════ */
 console.log('\n' + '─'.repeat(60));
 if (fail === 0) {
   console.log(`\x1b[32m全部通过：${pass} 通过 / 0 失败\x1b[0m`);
