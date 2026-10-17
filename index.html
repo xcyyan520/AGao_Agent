@@ -382,9 +382,65 @@
       max-height:none; overflow:visible;
     }
     .side > section{display:none; padding:10px}
-    /* 展开态：把手 + 内容，整体限高自己滚 */
-    .side.prep-open{max-height:46vh; overflow-y:auto}
+    /* ══ 展开态：整屏底部抽屉 ══
+       之前是 `max-height:46vh; overflow-y:auto`，实测（.run/probe_fold.mjs）
+       在 360x640 上展开后：材料区拿满 236px，**「说话」区被压成 21px**，
+       「开始说话」跑到材料框上面去了、还被「材料库」按钮盖住。
+       根因：侧栏是 flex 列，材料 section 是 `flex:1 1 auto; min-height:236px`
+       （见 DOM 行内样式），而 micSec 是 `flex:0 1 auto; min-height:0` ——
+       空间不够时被压的是 micSec，因为它允许压到 0。
+
+       现在：展开 = 从折叠把手下沿一直铺到屏幕底，用 fixed 定位，
+       把「够不够高」这个问题彻底取消掉，同时内容自己滚。
+       fixed 而不是 max-height:90vh 的原因是后者在某些手机浏览器上会被
+       地址栏高度变化搞得跳来跳去。
+
+       z-index:80 是为了把它们盖在 .nextq 之上（.nextq 在手机上 order:1、
+       在 DOM 里排在侧栏前面）。实测 .run/probe_drawer_occlusion.mjs：
+       抽屉铺开后在 390x844 / 360x640 / 414x896 三个尺寸下
+       10 个控件全部 elementFromPoint 命中自己，0 处被挡。
+       （曾担心过 `.nextq` 的定位会形成更高层，实测它并没有 position，
+        所以 70 和 80 都够用；留 80 只是给以后的层级改动留余量。） */
+    .side.prep-open{
+      position:fixed; left:0; right:0; bottom:0; top:auto;
+      overflow-y:auto; -webkit-overflow-scrolling:touch;
+      z-index:80; border-top:1px solid #3a4150;
+      box-shadow:0 -12px 34px rgba(0,0,0,.55);
+      /* 顶到折叠把手上头一点，视觉上把手和抽屉是一体的。
+         ⚠️ 必须给底部的 safe-area 留位置，否则最后一行（「保存材料」）
+            在 iPhone 上会被 Home 条盖住，点不到。 */
+      max-height:calc(100dvh - 52px);
+      padding-bottom:max(10px, env(safe-area-inset-bottom));
+      animation:sheetup .18s ease-out;
+    }
+    @keyframes sheetup{from{transform:translateY(10px); opacity:.6} to{transform:none; opacity:1}}
+    /* 抽屉展开时后面要变暗，否则分不清"现在在准备区"还是"在出题区"。
+       点遮罩也关抽屉——手机上找不到关闭按钮是最烦的。
+       ⚠️ 遮罩用 ::before + z-index:-1 配 .side 自己的 z-index 80 是不够的：
+          z-index:-1 会掉到 .side 的背景**下面**（因为 .side 现在有 z-index 了，
+          它成了一个层叠上下文，-1 的子元素就只在它内部排最后）。
+          实测那样遮罩看不见，屏幕一点都不暗。
+          现在改成 z-index:0 的独立 fixed 层，并把抽屉内容靠 section 的
+          position:relative; z-index:1 顶上来。 */
+    .side.prep-open::before{
+      content:''; position:fixed; inset:0; background:rgba(0,0,0,.45);
+      z-index:0;
+    }
+    .side.prep-open > *{position:relative; z-index:1}
     .side.prep-open > section{display:flex}
+    /* 抽屉里每一段都不许被压扁：内容多少就多高，整条抽屉自己滚。
+       这是这次「展开还是有问题」的正解——压扁是 flex 分配空间的锅，
+       干脆让所有 section 都 flex-shrink:0。
+
+       ⚠️ 这两条必须带 !important，原因很实在：材料那段在 DOM 上写着
+          行内 `style="flex:1 1 auto; min-height:236px"`（见 <section> 标签），
+          行内样式永远压过样式表规则，不带 !important 这条就是死代码。
+          桌面端那个值是对的（侧栏要撑满），手机上要的是相反的东西，
+          所以只能在媒体查询里用 !important 掀掉它。
+          实测（.run/probe_drawer_table.mjs）确认：不加时计算值仍是
+          flex=1 1 auto / minH=236px，那「不许压扁」这句话就没兑现。 */
+    .side.prep-open > section{flex:0 0 auto !important; min-height:auto !important; overflow:visible}
+    .side.prep-open #materials{min-height:120px !important; flex:0 0 auto !important}
     /* 「说话」这一块即使在不展开时也要露出来——它是主路径。
        所以单独放行，并且挪到最前面。 */
     .side > #micSec{display:flex; order:-1; padding:10px}
@@ -401,9 +457,23 @@
     .micshow{font-size:12.5px; max-height:56px}
     .hint{font-size:11px; line-height:1.5}
 
-    /* 材料框在手机上不需要 120px 那么高，够看三四行就行 */
-    #materials{min-height:88px; font-size:11.5px}
-    textarea{font-size:12px}
+    /* 材料框在手机上不需要 120px 那么高，够看三四行就行。
+       ⚠️ 但 88px 是"最低能看"，不是"就这么矮"——上面 .prep-open 里
+       已经把它放回 120px，抽屉里空间够。 */
+    #materials{min-height:120px; font-size:13px}
+    textarea{font-size:13px}
+
+    /* ── 抽屉里的小按钮 ──
+       实测抽屉展开后 btnMatLib 只有 19px 高、「保存材料」31px。
+       它们现在都在抽屉里，空间是够的，没有理由还这么小。 */
+    .side h2 button.mini, .side .row button{
+      min-height:40px; padding:9px 14px; font-size:13px;
+    }
+    .side h2 button.mini{min-width:auto}
+    /* 「保存材料 / N 字」这一行：按钮占大头，字数跟在后面 */
+    .side .row.mt{gap:8px}
+    /* 材料库列表里的条目也是可点的，别做成 16px 高的针 */
+    .lib-item{padding:9px 10px; font-size:13px}
 
     /* 弹层在手机上要接近全屏，否则内容挤成一条缝 */
     .modal{padding:8px; align-items:center}
@@ -525,10 +595,20 @@
         </div>
         <div id="matLibList" class="lib-list">加载中…</div>
       </div>
+      <!-- 上传文件：解析全在浏览器里做（filetext.mjs）。
+           为什么不在服务端解析：解析是在「用户点了选文件」那一刻发生的，
+           放服务端就要多传一次文件（20MB 的 PDF 传上来再丢，纯浪费），
+           而且手机用隧道时上传比下载慢得多。
+           ★ 一条约束：不要用 `accept` 之外的任何 extension 假设。
+             手机相册/文件选择器会无视 accept 给出任意类型，所以
+             extractText() 里对不认识的扩展名必须给出人话提示，不能静默返回空。 -->
+      <input type="file" id="fileInput" style="display:none">
       <div class="row mt" style="flex:0 0 auto">
         <button id="btnSaveMat">保存材料</button>
+        <button id="btnUpload" class="mini" title="支持 .txt / .md / .docx / .pdf，文件不上传，只在浏览器里取字">上传文件</button>
         <span class="pill" id="matStat">0 字</span>
       </div>
+      <div id="fileStat" class="hint" style="display:none"></div>
     </section>
 
     <!-- ── 说话（麦克风） ──
@@ -1420,6 +1500,86 @@ $('btnSaveMat').onclick = async () => {
 $('materials').addEventListener('input', e => {
   $('matStat').textContent = e.target.value.length + ' 字';
 });
+
+/* ── 上传文件，在浏览器里把文件变成纯文本 ──
+   全部解析都在这一端做（filetext.mjs 也是在这里 import 的），理由：
+   材料最终要落进 SQLite 的是**字**，不是文件本身。先把 20MB 的 PDF
+   传到服务端再转文字，白占一次带宽，还多一个「上传失败」的故障点。
+   手机走隧道时上行更慢，这一条更要紧。
+
+   ★ 三个必须处理的现实情况（都在下面代码里）：
+     1) 手机文件选择器不认 accept，会给出 .doc / .jpg / .heic 之类。
+        extractText() 会返回 note 说明，必须原样显示给用户看，
+        不能只说「失败」——人需要知道是他选错了类型还是文件坏了。
+     2) 大文件（>20MB）解析要几秒。解析是同步 CPU 活，期间页面会僵住，
+        所以先写一个「正在解析…」再 await，让浏览器有机会重绘。
+     3) 默认**追加**而不是覆盖。粘了半天的稿子被一次误点清空，
+        是那种让人当场关掉页面的体验。要换就用「清空重填」勾选。 */
+const FILE_MAX_BYTES = 24 * 1024 * 1024;
+let fileBusy = false;
+
+function setFileStat(msg, isErr) {
+  const el = $('fileStat');
+  if (!msg) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.style.color = isErr ? '#ff9d9d' : '';
+}
+
+$('btnUpload').onclick = () => {
+  if (fileBusy) return;
+  $('fileInput').click();
+};
+
+$('fileInput').onchange = async () => {
+  const f = $('fileInput').files && $('fileInput').files[0];
+  // 清空 value：同一个文件连选两次也要能触发 change，否则第二次点了没反应
+  $('fileInput').value = '';
+  if (!f) return;
+
+  if (f.size > FILE_MAX_BYTES) {
+    setFileStat(`这个文件 ${(f.size / 1048576).toFixed(1)}MB，超过 ${FILE_MAX_BYTES / 1048576}MB 了。请先转成文本再传。`, true);
+    return;
+  }
+
+  fileBusy = true;
+  $('btnUpload').disabled = true;
+  setFileStat(`正在解析 ${f.name}（${(f.size / 1024).toFixed(0)}KB）…`, false);
+  // 让浏览器先画出上面这句，再去干同步的解析活
+  await new Promise(r => setTimeout(r, 16));
+
+  try {
+    const { extractText } = await import('./filetext.mjs');
+    const r = await extractText(f);
+    const text = (r.text || '').trim();
+
+    if (!text) {
+      setFileStat(r.note || '这个文件里没取到文字。', true);
+      flash('没取到文字：' + (r.note || '未知原因'));
+      return;
+    }
+
+    const ta = $('materials');
+    const before = ta.value;
+    // 追加时空两行，避免和上一份材料粘成一句
+    ta.value = before.trim() ? before.replace(/\s+$/, '') + '\n\n' + text : text;
+    $('matStat').textContent = ta.value.length + ' 字';
+    // 触发 input 事件，让所有监听字数的逻辑（包括字数 pill）保持同步。
+    // 直接赋值 .value 是**不会**触发 input 的，这是个经典坑。
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const enc = r.encoding && r.encoding !== 'utf-8' ? ` · ${r.encoding.toUpperCase()}` : '';
+    const kindName = { text: '文本', docx: 'Word', pdf: 'PDF' }[r.kind] || r.kind;
+    setFileStat(`✓ ${f.name} → ${text.length} 字（${kindName}${enc}）已追加到材料框，点「保存材料」才生效`, false);
+    flash(`已读入 ${f.name}，${text.length} 字。确认内容无误后点「保存材料」`);
+  } catch (e) {
+    setFileStat(`解析 ${f.name} 出错：${e.message}`, true);
+    flash('文件解析失败：' + e.message);
+  } finally {
+    fileBusy = false;
+    $('btnUpload').disabled = false;
+  }
+};
 
 $('btnAsk').onclick = askQuestion;
 $('question').addEventListener('keydown', e => { if(e.key === 'Enter') askQuestion(); });
