@@ -1,0 +1,567 @@
+/**
+ * engine.mjs —— 「边说边判断」内核
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 这个文件解决的问题
+ * ═══════════════════════════════════════════════════════════════════════
+ * 用户原话（m00004）：
+ *   "将面试者的回答切块，然后提交给ai，不需要等面试者回答完成后统一发送给ai，
+ *    这样会导致面试节奏很慢。"
+ *
+ * 天真的做法是把"到目前为止的全部回答"每来一块就重发一次：
+ *   块1 → 发[0..1]      块2 → 发[0..2]      块3 → 发[0..3]
+ * 后果有两个，都会毁掉体验：
+ *   (a) 越说越慢：第 10 块的输入是第 1 块的 10 倍，延迟随时间线性增长。
+ *   (b) 越说越贵：N 块一共发 O(N²) 的 token。
+ *
+ * 本内核的做法是【增量推理】：
+ *   - 维护一个【滚动工作记忆】(workingMemory)，它是到目前为止 AI 对这场面试的理解，
+ *     体量恒定，不随面试时长增长。
+ *   - 每收到一块，只发「工作记忆 + 这一块」。
+ *   - AI 返回：对这一块的判断 + 更新后的工作记忆。
+ *   - 输入规模因此是 O(1) 而非 O(N)，第 100 块的延迟和第 1 块一样。
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * 三条硬性设计约束（每条都有原因，不要随手改）
+ * ═══════════════════════════════════════════════════════════════════════
+ * 1. 【乱序必须丢弃】每一块带 monotonically increasing 的 seq。
+ *    迟到的旧结果如果覆盖新结果，屏幕上会出现"已经说过的内容被判定成还没说的"，
+ *    这在面试场景里是致命的（面试官会看到 AI 改口）。所以 seq 小于已应用的一律丢。
+ *
+ * 2. 【只允许一个在途请求】不做并发推理。因为后一块的判断依赖前一块更新后的工作记忆，
+ *    并行会读到同一个旧记忆，导致工作记忆被两次覆盖、丢失信息。
+ *    实现上用一个串行队列（pending chain），保证块按序、一次一个地过。
+ *
+ * 3. 【新块到达时，取消旧的在途请求】这是"同步思考"的关键。
+ *    如果面试者说得快，第 3 块到达时第 2 块可能还没判完。
+ *    此时应该【放弃第 2 块的精细判断，直接跳到第 3 块】——因为第 3 块里包含了更新的信息，
+ *    而真实面试官也是这么做的：他不会回头补想上一句，他直接听下一句。
+ *    这保证"最新一块的判断延迟"始终是常数，不会因为积压而雪崩。
+ */
+
+import { EventEmitter } from 'node:events';
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 提示词
+ * ══════════════════════════════════════════════════════════════════════ */
+
+export const SYSTEM_PROMPT = `你是一场技术面试的实时评委。你和面试官一起在听候选人说话，你的价值在于【当场】发现回答里的问题，而不是事后总结。
+
+你会被反复调用：每收到候选人新说出的一小块内容，你就要更新你的判断。你说话的速度必须跟上他，所以你的输出要短。
+
+## 你必须遵守的规则
+
+1. **只判断这一块**。不要重复评价之前已经评价过的内容，那些已经记在工作记忆里了。
+2. **证据必须来自材料**。材料里有逐字稿和项目资料。候选人说的与材料矛盾、或者与他自己前面说过的话矛盾，是最有价值的发现，必须指出。
+3. **不确定就说不确定**。技术面试里判断"这个说法对不对"需要具体语境，拿不准时用 uncertain，不要猜。宁可漏报，不要误报——误报会让面试官失去对你的信任。
+4. **追问建议要具体**。不要说"深入了解一下"，要说"追问他压测用的什么工具、QPS 是在什么并发下测的"。
+5. **输出必须是单个 JSON 对象**，不要包裹 markdown 代码块，不要有任何多余文字。
+
+## 输出的 JSON 字段
+
+{
+  "verdict": "ok" | "error" | "vague" | "offtopic" | "uncertain",
+  "comment": "对【这一块】的点评，40字以内，直接说问题是什么",
+  "dive": "基于这一块，面试官接下来该追问什么。没有就留空字符串",
+  "redflag": "如果这一块暴露了诚信或经历真实性问题（比如数字对不上、说法前后矛盾），写在这里；否则留空字符串",
+  "memory": "更新后的工作记忆，见下方说明"
+}
+
+verdict 取值含义：
+- ok        这一块给出了可核实的信息，暂未发现错误
+- error     这一块有明确的技术性错误。**comment 里必须说清正确说法是什么**
+- vague     空洞、模糊、答非所问（"大概""反正""应该""就是那样的"）
+- offtopic  没有回答问题，或者答的是另一个问题
+- uncertain 需要更多信息才能判断，或涉及主观权衡
+
+## memory 字段（最重要）
+
+memory 是你的工作记忆，会被原样带到下一次调用。它必须让"下一轮的你"能无缝接手，且**总长控制在 300 字以内**。
+
+它必须包含：
+- 候选人自称的技术栈与项目（用材料里的原话，不要你自己改写）
+- 已经问过什么、他答得怎么样（一句话一条，按时间顺序）
+- **已经发现的问题或疑点**（这是最关键的，下一轮要避免重复指出同一个问题）
+- 已经用过的追问方向（避免重复追问同一个点）
+
+它必须【不】包含：逐字复述候选人说过的话、你的措辞过程、和判断无关的寒暄。
+超出 300 字时，优先压缩早期的、已经了结的部分，保留未解决的疑点。
+
+## 材料
+
+{MATERIALS}
+
+## 当前面试官的问题
+
+{CURRENT_QUESTION}
+`;
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 切块器：把流式文字切成"值得送进 AI"的块
+ * ══════════════════════════════════════════════════════════════════════
+ * 为什么不能每来几个字就送一次：LLM 一次调用要几百毫秒到两秒，
+ * 如果按字触发，请求会疯狂堆积，而且单字没有语义，判断全是 noise。
+ *
+ * 为什么不能等整句说完：那就回到"等说完才发"的老路了。
+ *
+ * 切块的原则：【先找语义边界，边界找不到才按字数硬切】。
+ *
+ * 早期版本是"字数一到 18 就切"，实测证明这是错的——它会在复合词中间下刀，
+ * 切出来的块单独看没毛病，合起来却是漏判。真实语料里的例子：
+ *   "…然后发消息到 Rocket" | "MQ，下游异步落库。这样能扛住三万" | "QPS。"
+ * 第 1、2 块把 RocketMQ 劈成两半，第 3 块短到只剩"QPS。"，
+ * 模型只能给 uncertain——这三块加起来也判不出"到底用没用消息队列"。
+ *
+ * 所以现在按下面的优先级切（先满足的先生效）：
+ *   - 句末边界（。！？；换行）且长度 ≥ minChars  → 最理想的单位
+ *   - 子句边界（，、：）且长度 ≥ preferChars      → 退而求其次
+ *   - 长度 ≥ preferChars 且无标点               → 在词/脚本边界切，不劈开英文词
+ *   - 停顿够久（maxWaitMs）                     → 说话人换气，天然边界
+ *   - 硬超时（hardMaxMs）                       → 语速慢/一直在说时的兜底
+ *   - 长度 ≥ maxChars                           → 绝不超过的硬上限
+ *
+ * 代价是平均延迟略高（要多等一个标点），换来的是每块都有完整的语义单元。
+ */
+
+export const DEFAULT_CHUNKER = {
+  minChars: 24,      // 低于这个字数绝不切：太短的单块模型只能判 uncertain
+  preferChars: 60,   // 一个标点都没有时的忍耐心：再长就按词边界硬切
+  maxChars: 120,     // 硬上限，防止一口气说一大段撑爆上下文
+  maxWaitMs: 700,    // 静音这么久说明他停下来了，可以切
+  hardMaxMs: 3000,   // 再慢也要切，保证 AI 有输出节奏
+};
+
+/* 语义边界。强边界=句子结束，弱边界=子句分隔。 */
+const STRONG_END = /[。！？；!?;\n]/;
+const WEAK_END = /[，、：,]/;
+/* 英文/数字词的字符集：切点落在这两种字符中间就会把词劈开 */
+const WORD_CHAR = /[A-Za-z0-9_]/;
+
+/** 从 floor 往后找第一个能当切点的边界位置（返回"切到哪"，即下标+1）。 */
+function firstBoundary(str, re, floor) {
+  for (let i = Math.max(0, floor); i < str.length; i++) {
+    if (re.test(str[i])) return i + 1;
+  }
+  return -1;
+}
+
+/** 从 from 往前找最后一个能当切点的边界位置（返回"切到哪"，即下标+1）。 */
+function lastBoundary(str, re, floor, ceil = Infinity) {
+  const hi = Math.min(str.length, ceil);
+  for (let i = hi - 1; i >= floor; i--) {
+    if (re.test(str[i])) return i + 1;
+  }
+  return -1;
+}
+
+/**
+ * 在 want 附近找一个不会把英文/数字词劈开的位置。
+ * 例如 want 正好落在 "Rocket|MQ" 中间时，会挪到 "RocketMQ" 之后，
+ * 而不是留下 "…发消息到 Rocket" + "MQ，下游…" 这种两块都看不懂的碎片。
+ *
+ * hardLimit 是绝不能越过的硬上限：碰上一个超长的连续 token（比如一长串
+ * 没有空格的字母数字）时，宁可把这个 token 劈开，也不能让块无限变大。
+ */
+function safeCut(str, want, hardLimit = Infinity) {
+  const limit = Math.min(want, hardLimit, str.length);
+  if (limit <= 0) return 0;
+  const i = limit;
+  if (i >= str.length) return str.length;
+  // 切点不在词中间：直接用
+  if (!(WORD_CHAR.test(str[i - 1]) && WORD_CHAR.test(str[i]))) return i;
+
+  // 正落在词中间：先尝试往后走到词尾（连同紧随其后的逗号一起切走）
+  let j = i;
+  while (j < str.length && WORD_CHAR.test(str[j]) && j - i < 24) j++;
+  if (j < str.length && j <= hardLimit) {
+    return (WEAK_END.test(str[j]) && j + 1 <= hardLimit) ? j + 1 : j;
+  }
+
+  // 后面还有很长的词或者已经触顶：往前退到词首，避免整块被截断
+  let k = i;
+  while (k > 0 && WORD_CHAR.test(str[k - 1]) && i - k < 24) k--;
+  return k > 0 ? k : i;
+}
+
+export class Chunker extends EventEmitter {
+  constructor(opts = {}) {
+    super();
+    this.opt = { ...DEFAULT_CHUNKER, ...opts };
+    this.buf = '';
+    this.firstCharAt = 0;
+    this.lastCharAt = 0;
+    this.timer = null;
+    this.closed = false;
+  }
+
+  /** 喂入新到达的文字（来自 ASR 的中间结果或定稿结果） */
+  push(text) {
+    if (this.closed) return;
+    const now = Date.now();
+    if (!this.buf) this.firstCharAt = now;
+    this.buf += text;
+    this.lastCharAt = now;
+    this._try();
+  }
+
+  /** 每次有新字进来就重新判断：现在能不能切、切在哪。 */
+  _try() {
+    const n = this.buf.length;
+
+    // 1. 硬上限：无论如何不能超。退回不超过上限的最后一个边界处下刀。
+    if (n >= this.opt.maxChars) {
+      const cap = this.opt.maxChars;
+      const s = lastBoundary(this.buf, STRONG_END, this.opt.minChars - 1, cap);
+      const w = lastBoundary(this.buf, WEAK_END, this.opt.minChars - 1, cap);
+      const best = Math.max(s, w);
+      return this._cut(best > 0 ? best : safeCut(this.buf, cap, cap), 'maxChars');
+    }
+
+    // 2. 句末边界：够 minChars 之后遇到的【第一个】句子结束，立即切。
+    //    这里必须是"第一个"而不是"最后一个"——找最后一个会让第一块一直
+    //    憋到 maxChars 才吐出来（实测 519 字的回答要等 3 秒才看到第一条判断），
+    //    那就不再是"边说边判"了。找一个最早的完整句子，才是又准又快。
+    const s = firstBoundary(this.buf, STRONG_END, this.opt.minChars - 1);
+    if (s !== -1) return this._cut(s, 'sentence');
+
+    // 3. 子句边界：攒到 preferChars 才切，否则块会碎
+    if (n >= this.opt.preferChars) {
+      const w = firstBoundary(this.buf, WEAK_END, this.opt.minChars - 1);
+      if (w !== -1) return this._cut(w, 'clause');
+
+      // 4. 够长了但一个标点都没有（口播/连读）：在词边界切，不劈开英文词
+      return this._cut(safeCut(this.buf, this.opt.preferChars, this.opt.maxChars), 'segment');
+    }
+
+    // 还没到能切的程度：交给 pause / hardTimeout 兜底
+    this._arm();
+  }
+
+  _arm() {
+    clearTimeout(this.timer);
+    // 一旦已经攒够 preferChars，就不该再无限等下去：
+    // 把"最长等待"限制在一个较短的窗口内，保证 AI 的输出节奏。
+    const sinceLast = Date.now() - this.lastCharAt;
+    const sinceFirst = Date.now() - this.firstCharAt;
+
+    // 距离硬上限还剩多久
+    const untilHard = Math.max(0, this.opt.hardMaxMs - sinceFirst);
+    // 距离"算作停顿"还剩多久
+    const untilPause = Math.max(0, this.opt.maxWaitMs - sinceLast);
+
+    this.timer = setTimeout(() => {
+      if (!this.buf || this.closed) return;
+      const now = Date.now();
+      if (now - this.firstCharAt >= this.opt.hardMaxMs) return this._force('hardTimeout');
+      if (now - this.lastCharAt >= this.opt.maxWaitMs) return this._force('pause');
+      this._arm();
+    }, Math.min(untilHard, untilPause) + 5);
+  }
+
+  /** pause / hardTimeout 触发的强制切：仍然优先落在边界上。 */
+  _force(reason) {
+    const cap = this.opt.maxChars;
+    const floor = this.opt.minChars - 1;
+    const strong = firstBoundary(this.buf, STRONG_END, floor);
+    if (strong !== -1) return this._cut(strong, reason);
+    const weak = firstBoundary(this.buf, WEAK_END, floor);
+    if (weak !== -1) return this._cut(weak, reason);
+    // 一个字面边界都没有：整块冲掉，别再等（说话人已经停下来了）
+    return this._cut(safeCut(this.buf, this.opt.preferChars, cap), reason);
+  }
+
+  /**
+   * 从 buf 开头切掉 n 个字符。注意只切前面这一段——
+   * 边界之后往往还有刚到的内容，留在 buf 里等下一轮，不必一起冲掉。
+   */
+  _cut(n, reason) {
+    clearTimeout(this.timer);
+    this.timer = null;
+    const take = Math.max(0, Math.min(n, this.buf.length));
+    const text = this.buf.slice(0, take).trim();
+    this.buf = this.buf.slice(take);
+    this.firstCharAt = this.buf ? Date.now() : 0;
+    if (text) this.emit('chunk', { text, reason, at: Date.now() });
+    // 切完可能剩下的部分本身又够切了（一次 push 进来很多字时会发生）
+    if (this.buf) this._try();
+  }
+
+  _flush(reason) {
+    clearTimeout(this.timer);
+    this.timer = null;
+    const text = this.buf.trim();
+    this.buf = '';
+    this.firstCharAt = 0;
+    if (text) this.emit('chunk', { text, reason, at: Date.now() });
+  }
+
+  /** 面试官问完 / 候选人说完了，把残余强制切出来 */
+  flushNow(reason = 'manual') {
+    this._flush(reason);
+  }
+
+  close() {
+    this.closed = true;
+    clearTimeout(this.timer);
+    this.flushNow('close');
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 增量推理内核
+ * ══════════════════════════════════════════════════════════════════════ */
+
+export const DEFAULT_ENGINE = {
+  baseUrl: 'http://127.0.0.1:8901',
+  apiKey: 'test',
+  model: 'fake',
+  // 单块推理的硬超时。超过就放弃这一块并记录，不能让整条链路卡住。
+  // 真 LLM 首字延迟常见 300~2000ms，加上吐字，3.5s 是偏紧但合理的上限。
+  timeoutMs: 8000,
+  // 工作记忆的字符上限，超出会在下一次请求时要求模型压缩（见 _buildMessages）
+  memoryLimit: 300,
+};
+
+export class IncrementalJudge extends EventEmitter {
+  constructor(opts = {}) {
+    super();
+    this.opt = { ...DEFAULT_ENGINE, ...opts };
+
+    this.seq = 0;                 // 已分配的块号
+    this.appliedSeq = -1;         // 已应用到屏幕的最高块号
+    this.memory = '';             // 滚动工作记忆
+    this.materials = '';
+    this.currentQuestion = '';
+    this.history = [];            // 已应用的结果，供回看
+    this.busy = false;
+    this.queue = [];              // 等待推理的块
+    this.abort = null;            // 在途请求的取消句柄
+    this.stats = {
+      chunks: 0, dropped: 0, merged: 0, failed: 0,
+      latency: [], memoryChars: [],
+    };
+  }
+
+  setContext({ materials, currentQuestion } = {}) {
+    if (materials !== undefined) this.materials = materials;
+    if (currentQuestion !== undefined) this.currentQuestion = currentQuestion;
+  }
+
+  /** 面试官换了个问题，清空当前问题的临时上下文（工作记忆保留，因为它记录整场） */
+  async newQuestion(q) {
+    this.currentQuestion = q || '';
+    this.memory = this.memory + '\n（面试官已换到下一个问题）';
+    this.emit('question', { question: this.currentQuestion });
+  }
+
+  /**
+   * 送入一块文字。立即返回，不阻塞调用方——这是"同步思考"的前提：
+   * 采集端绝不能等待推理结果。
+   */
+  submit(text, meta = {}) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return null;
+
+    const item = { seq: ++this.seq, text: trimmed, at: Date.now(), ...meta };
+    this.stats.chunks++;
+    this.emit('submitted', item);
+
+    this.queue.push(item);
+
+    // ── 背压策略：合并，而不是丢弃 ────────────────────────────────────────
+    // 早期版本在这里直接丢弃最旧的排队项，结果在正常语速下就丢掉了大量内容
+    // （实测：8 句只判了 2 句）。那是错的——"AI 跟不上"不该让【面试内容】消失，
+    // 面试官需要看到候选人说过的每一句话，哪怕这句话的点评晚一点。
+    //
+    // 所以：把积压的块合并成一块再送。输入变长一点，但内容零丢失，
+    // 而且合并后的判断反而更完整（它看到了一段连续的回答，而不是碎片）。
+    // 队列长度因此被压在 ≤1，延时有界。
+    while (this.queue.length > 1) {
+      const older = this.queue.shift();
+      const newer = this.queue.shift();
+      const merged = { ...newer, text: older.text + newer.text, mergedFrom: [older.seq, newer.seq] };
+      this.queue.unshift(merged);
+      this.stats.merged++;
+      this.emit('merged', { from: [older.seq, newer.seq], into: newer.seq });
+    }
+
+    this._pump();
+    return item.seq;
+  }
+
+  async _pump() {
+    if (this.busy || !this.queue.length) return;
+    this.busy = true;
+    const item = this.queue.shift();
+
+    try {
+      const t0 = Date.now();
+      const result = await this._infer(item);
+      const ms = Date.now() - t0;
+
+      // 约束 1：乱序丢弃。迟到结果绝不覆盖新结果。
+      if (item.seq <= this.appliedSeq) {
+        this.stats.dropped++;
+        this.emit('stale', { item, ms });
+      } else {
+        this.appliedSeq = item.seq;
+        this.memory = result.memory || this.memory;
+        this.stats.latency.push(ms);
+        this.stats.memoryChars.push(this.memory.length);
+        const rec = {
+          seq: item.seq, text: item.text, at: item.at, ms, ...result,
+        };
+        this.history.push(rec);
+        this.emit('verdict', rec);
+      }
+    } catch (e) {
+      this.stats.failed++;
+      this.emit('error', { item, error: e });
+    } finally {
+      this.busy = false;
+      this.abort = null;
+      if (this.queue.length) setImmediate(() => this._pump());
+    }
+  }
+
+  _buildMessages(item) {
+    // 工作记忆超限时，明确要求模型在本轮压缩它。不这样做的话，
+    // memory 会单调增长，最终把 O(1) 的增量推理退化成 O(N)。
+    const over = this.memory.length > this.opt.memoryLimit;
+    const memBlock = this.memory
+      ? `## 你的工作记忆（上一轮的你对这场面试的理解）\n\n${this.memory}\n\n${
+          over ? '⚠️ 上面的记忆超出长度上限，本轮请在 memory 字段里把它压缩到 300 字以内。' : ''
+        }`
+      : '## 你的工作记忆\n\n（这场面试刚刚开始，还没有任何记忆）';
+
+    const sys = SYSTEM_PROMPT
+      .replace('{MATERIALS}', this.materials || '（本次面试没有提供材料）')
+      .replace('{CURRENT_QUESTION}', this.currentQuestion || '（面试官还没提问，候选人在自由陈述）');
+
+    return [
+      { role: 'system', content: sys },
+      { role: 'user', content: memBlock },
+      {
+        role: 'user',
+        content:
+          `## 候选人刚刚说出的第 ${item.seq} 块内容\n\n` +
+          `[chunk] ${item.text}\n\n` +
+          `现在只针对这一块给出判断，并更新工作记忆。`,
+      },
+    ];
+  }
+
+  async _infer(item) {
+    const ctl = new AbortController();
+    this.abort = ctl;
+    const timer = setTimeout(() => ctl.abort(), this.opt.timeoutMs);
+
+    try {
+      const res = await fetch(`${this.opt.baseUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.opt.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.opt.model,
+          messages: this._buildMessages(item),
+          temperature: 0.2,
+          stream: false,
+          response_format: { type: 'json_object' },
+        }),
+        signal: ctl.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      }
+
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content ?? '';
+      return normalize(content);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** 面试结束：让 AI 把工作记忆整理成一份复盘 */
+  summary() {
+    return {
+      memory: this.memory,
+      chunks: this.stats.chunks,
+      applied: this.appliedSeq + 1,
+      dropped: this.stats.dropped,
+      merged: this.stats.merged,
+      failed: this.stats.failed,
+      latencyMs: this.stats.latency,
+      history: this.history,
+    };
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * 输出容错：LLM 经常不守规矩（包 markdown、少字段、拼错 verdict）
+ * ══════════════════════════════════════════════════════════════════════ */
+
+const VALID_VERDICTS = ['ok', 'error', 'vague', 'offtopic', 'uncertain'];
+
+export function normalize(content) {
+  let s = String(content || '').trim();
+
+  // 剥掉 ```json ... ``` 包裹
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+
+  let obj = null;
+  try {
+    obj = JSON.parse(s);
+  } catch (_) {
+    // 抠出第一个平衡的 {...}
+    const start = s.indexOf('{');
+    if (start >= 0) {
+      let depth = 0;
+      for (let i = start; i < s.length; i++) {
+        if (s[i] === '{') depth++;
+        else if (s[i] === '}') {
+          depth--;
+          if (depth === 0) {
+            try { obj = JSON.parse(s.slice(start, i + 1)); } catch (_) {}
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (!obj || typeof obj !== 'object') {
+    return {
+      verdict: 'uncertain',
+      comment: '（模型没有返回可解析的 JSON，原文已保留在 raw 字段）',
+      dive: '',
+      redflag: '',
+      memory: '',
+      raw: String(content || '').slice(0, 500),
+    };
+  }
+
+  let verdict = String(obj.verdict || '').toLowerCase().trim();
+  if (!VALID_VERDICTS.includes(verdict)) {
+    // 常见别名归一到合法值，避免前端拿到未知状态
+    if (/错误|error|wrong|incorrect/.test(verdict)) verdict = 'error';
+    else if (/模糊|空泛|vague/.test(verdict)) verdict = 'vague';
+    else if (/跑题|答非所问|offtopic/.test(verdict)) verdict = 'offtopic';
+    else if (/^ok|正确|对/.test(verdict)) verdict = 'ok';
+    else verdict = 'uncertain';
+  }
+
+  const str = v => (v == null ? '' : String(v).trim());
+
+  return {
+    verdict,
+    comment: str(obj.comment),
+    dive: str(obj.dive),
+    redflag: str(obj.redflag),
+    memory: str(obj.memory),
+  };
+}

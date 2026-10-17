@@ -1,0 +1,921 @@
+{
+  "S": "corpus_1792154859667",
+  "QUESTION": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异",
+  "ANSWER_chars": 2235,
+  "SPEED": 8,
+  "generated": [
+    "LangGraph 比原生 Agent 强在哪，举个例子？",
+    "那 LangChain 原生 Agent 做不了这个循环吗？",
+    "断点恢复具体怎么做的，状态存哪？",
+    "你说的状态图，具体怎么落到代码里的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangGraph 的断点恢复具体怎么用的？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那断点恢复具体是怎么实现的？",
+    "那工具调用失败或者模型选错工具，你怎么兜？",
+    "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 差在哪？",
+    "这个薄封装层超时了怎么办？",
+    "那个幂等键具体是怎么生成的？",
+    "那 Python 侧怎么知道当前顾客是谁？",
+    "那当前顾客的身份是怎么传到 Python 侧的？",
+    "换 Redis checkpointer 之后，并发怎么保证不串？",
+    "跨客户串台这个，你们是怎么测出来的？",
+    "只靠主动删的话，异常断开的会话怎么办？",
+    "拿不到锁的请求入队，队列满了怎么办？",
+    "按 thread_id 加锁，那锁超时了怎么办？",
+    "那剩余预算不够时，你具体怎么处理？",
+    "那超时兜底转人工后，这次会话状态怎么处理？"
+  ],
+  "realQuestions": [
+    "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异",
+    "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的",
+    "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别",
+    "如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法"
+  ],
+  "rows": [
+    {
+      "g": "LangGraph 比原生 Agent 强在哪，举个例子？",
+      "s": 0.6086956521739131,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 做不了这个循环吗？",
+      "s": 0.625,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "断点恢复具体怎么做的，状态存哪？",
+      "s": 0.15384615384615385,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "你说的状态图，具体怎么落到代码里的？",
+      "s": 0.13333333333333333,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangGraph 的断点恢复具体怎么用的？",
+      "s": 0.5,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "s": 0.7407407407407407,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那断点恢复具体是怎么实现的？",
+      "s": 0.25,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那工具调用失败或者模型选错工具，你怎么兜？",
+      "s": 0.11764705882352941,
+      "ri": 3,
+      "rq": "如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法"
+    },
+    {
+      "g": "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 差在哪？",
+      "s": 0.5405405405405406,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "这个薄封装层超时了怎么办？",
+      "s": 0.09090909090909091,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那个幂等键具体是怎么生成的？",
+      "s": 0.08333333333333333,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 Python 侧怎么知道当前顾客是谁？",
+      "s": 0.058823529411764705,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那当前顾客的身份是怎么传到 Python 侧的？",
+      "s": 0.05,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "换 Redis checkpointer 之后，并发怎么保证不串？",
+      "s": 0.07407407407407407,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "跨客户串台这个，你们是怎么测出来的？",
+      "s": 0.06666666666666667,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "只靠主动删的话，异常断开的会话怎么办？",
+      "s": 0.0625,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "拿不到锁的请求入队，队列满了怎么办？",
+      "s": 0.06666666666666667,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "按 thread_id 加锁，那锁超时了怎么办？",
+      "s": 0.05263157894736842,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那剩余预算不够时，你具体怎么处理？",
+      "s": 0.07142857142857142,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那超时兜底转人工后，这次会话状态怎么处理？",
+      "s": 0.05555555555555555,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    }
+  ],
+  "stats": {
+    "chunks": 54,
+    "dropped": 0,
+    "merged": 28,
+    "failed": 0,
+    "latency": [
+      3048,
+      5411,
+      1970,
+      2941,
+      1568,
+      2681,
+      2212,
+      1941,
+      2560,
+      1125,
+      1049,
+      1342,
+      1084,
+      1383,
+      989,
+      1127,
+      1830,
+      7140,
+      2031,
+      1999,
+      4342,
+      2647,
+      3658,
+      1500,
+      3220
+    ],
+    "draftLatency": [
+      2892,
+      5342,
+      1814,
+      2689,
+      1385,
+      2509,
+      2066,
+      1783,
+      2433,
+      1003,
+      846,
+      1175,
+      929,
+      1192,
+      772,
+      930,
+      1701,
+      6983,
+      1830,
+      1889,
+      4153,
+      2432,
+      3369,
+      1342,
+      3023
+    ],
+    "answerChars": [
+      46,
+      107,
+      132,
+      179,
+      238,
+      281,
+      334,
+      367,
+      418,
+      457,
+      488,
+      528,
+      592,
+      628,
+      658,
+      691,
+      742,
+      797,
+      837,
+      874,
+      933,
+      966,
+      1022,
+      1063,
+      1091,
+      1136,
+      1173,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+    ]
+  },
+  "log": [
+    {
+      "t": 4612,
+      "type": "draft",
+      "q": "LangGraph 比原生 Agent 强在哪，举个例子？",
+      "ms": 2892
+    },
+    {
+      "t": 4769,
+      "type": "nextq",
+      "q": "LangGraph 比原生 Agent 强在哪，举个例子？",
+      "reason": "他刚提 LangGraph，需说清选型差异",
+      "kind": "probe",
+      "basis": "用 Python+LangGraph 做的",
+      "ms": 3048
+    },
+    {
+      "t": 5206,
+      "type": "merged",
+      "from": [
+        3,
+        4
+      ],
+      "into": 4
+    },
+    {
+      "t": 6838,
+      "type": "merged",
+      "from": [
+        4,
+        5
+      ],
+      "into": 5
+    },
+    {
+      "t": 8506,
+      "type": "merged",
+      "from": [
+        5,
+        6
+      ],
+      "into": 6
+    },
+    {
+      "t": 9381,
+      "type": "merged",
+      "from": [
+        6,
+        7
+      ],
+      "into": 7
+    },
+    {
+      "t": 10111,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 做不了这个循环吗？",
+      "ms": 5342
+    },
+    {
+      "t": 10180,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 做不了这个循环吗？",
+      "reason": "顺着编排差异追问，看是否真懂两者边界",
+      "kind": "probe",
+      "basis": "多智能体编排、带循环",
+      "ms": 5411
+    },
+    {
+      "t": 11674,
+      "type": "merged",
+      "from": [
+        8,
+        9
+      ],
+      "into": 9
+    },
+    {
+      "t": 11993,
+      "type": "draft",
+      "q": "断点恢复具体怎么做的，状态存哪？",
+      "ms": 1814
+    },
+    {
+      "t": 12150,
+      "type": "nextq",
+      "q": "断点恢复具体怎么做的，状态存哪？",
+      "reason": "提到断点恢复但没展开，是深挖点",
+      "kind": "probe",
+      "basis": "断点恢复、人工介入",
+      "ms": 1970
+    },
+    {
+      "t": 14281,
+      "type": "merged",
+      "from": [
+        10,
+        11
+      ],
+      "into": 11
+    },
+    {
+      "t": 14606,
+      "type": "merged",
+      "from": [
+        11,
+        12
+      ],
+      "into": 12
+    },
+    {
+      "t": 14840,
+      "type": "draft",
+      "q": "你说的状态图，具体怎么落到代码里的？",
+      "ms": 2689
+    },
+    {
+      "t": 15091,
+      "type": "nextq",
+      "q": "你说的状态图，具体怎么落到代码里的？",
+      "reason": "只讲了概念，没给实现细节",
+      "kind": "probe",
+      "basis": "状态图模型跟场景更匹配",
+      "ms": 2941
+    },
+    {
+      "t": 16476,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1385
+    },
+    {
+      "t": 16660,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "材料只对比了 Spring AI，没答原生差异",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1568
+    },
+    {
+      "t": 17993,
+      "type": "merged",
+      "from": [
+        14,
+        15
+      ],
+      "into": 15
+    },
+    {
+      "t": 19170,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2509
+    },
+    {
+      "t": 19342,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是编排模型本质区别，材料未展开",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2681
+    },
+    {
+      "t": 20276,
+      "type": "merged",
+      "from": [
+        16,
+        17
+      ],
+      "into": 17
+    },
+    {
+      "t": 21408,
+      "type": "draft",
+      "q": "那 LangGraph 的断点恢复具体怎么用的？",
+      "ms": 2066
+    },
+    {
+      "t": 21553,
+      "type": "nextq",
+      "q": "那 LangGraph 的断点恢复具体怎么用的？",
+      "reason": "他提了断点恢复却没展开细节",
+      "kind": "probe",
+      "basis": "断点恢复、人工介入",
+      "ms": 2212
+    },
+    {
+      "t": 23330,
+      "type": "merged",
+      "from": [
+        18,
+        19
+      ],
+      "into": 19
+    },
+    {
+      "t": 23337,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1783
+    },
+    {
+      "t": 23495,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他提了 LangGraph 但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "用 Python+LangGraph 做的",
+      "ms": 1941
+    },
+    {
+      "t": 25403,
+      "type": "merged",
+      "from": [
+        20,
+        21
+      ],
+      "into": 21
+    },
+    {
+      "t": 25929,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2433
+    },
+    {
+      "t": 26056,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他正讲两库分工，追问核心差异",
+      "kind": "probe",
+      "basis": "LangChain 的 @tool 装饰器",
+      "ms": 2560
+    },
+    {
+      "t": 27059,
+      "type": "draft",
+      "q": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "ms": 1003
+    },
+    {
+      "t": 27181,
+      "type": "nextq",
+      "q": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "reason": "他讲了分工，没讲原生 Agent 的局限",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 1125
+    },
+    {
+      "t": 28026,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 846
+    },
+    {
+      "t": 28230,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了分工，但没对比原生 Agent 的差异",
+      "kind": "probe",
+      "basis": "LangChain 声明、LangGraph 节点去调",
+      "ms": 1049
+    },
+    {
+      "t": 29405,
+      "type": "draft",
+      "q": "那断点恢复具体是怎么实现的？",
+      "ms": 1175
+    },
+    {
+      "t": 29572,
+      "type": "nextq",
+      "q": "那断点恢复具体是怎么实现的？",
+      "reason": "提到 checkpoint 但没展开机制",
+      "kind": "probe",
+      "basis": "断点恢复、checkpoint",
+      "ms": 1342
+    },
+    {
+      "t": 30502,
+      "type": "draft",
+      "q": "那工具调用失败或者模型选错工具，你怎么兜？",
+      "ms": 929
+    },
+    {
+      "t": 30657,
+      "type": "nextq",
+      "q": "那工具调用失败或者模型选错工具，你怎么兜？",
+      "reason": "工具执行链路只讲了成功路径",
+      "kind": "probe",
+      "basis": "自动执行、把结果回填",
+      "ms": 1084
+    },
+    {
+      "t": 31850,
+      "type": "draft",
+      "q": "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 差在哪？",
+      "ms": 1192
+    },
+    {
+      "t": 32041,
+      "type": "nextq",
+      "q": "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 差在哪？",
+      "reason": "他讲了分工但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph负责状态图编排",
+      "ms": 1383
+    },
+    {
+      "t": 32767,
+      "type": "merged",
+      "from": [
+        27,
+        28
+      ],
+      "into": 28
+    },
+    {
+      "t": 32813,
+      "type": "draft",
+      "q": "这个薄封装层超时了怎么办？",
+      "ms": 772
+    },
+    {
+      "t": 33030,
+      "type": "nextq",
+      "q": "这个薄封装层超时了怎么办？",
+      "reason": "跨语言调用失败处理没说",
+      "kind": "probe",
+      "basis": "HTTP回调Java侧inner接口",
+      "ms": 989
+    },
+    {
+      "t": 33960,
+      "type": "draft",
+      "q": "那个幂等键具体是怎么生成的？",
+      "ms": 930
+    },
+    {
+      "t": 34158,
+      "type": "nextq",
+      "q": "那个幂等键具体是怎么生成的？",
+      "reason": "说了要加幂等键，但没说怎么生成",
+      "kind": "probe",
+      "basis": "写操作必须加幂等键",
+      "ms": 1127
+    },
+    {
+      "t": 36087,
+      "type": "draft",
+      "q": "那 Python 侧怎么知道当前顾客是谁？",
+      "ms": 1701
+    },
+    {
+      "t": 36216,
+      "type": "nextq",
+      "q": "那 Python 侧怎么知道当前顾客是谁？",
+      "reason": "他说校验必须在 Java 侧做，但没说身份怎么传",
+      "kind": "probe",
+      "basis": "校验必须在 Java 侧做",
+      "ms": 1830
+    },
+    {
+      "t": 37871,
+      "type": "merged",
+      "from": [
+        31,
+        32
+      ],
+      "into": 32
+    },
+    {
+      "t": 38089,
+      "type": "merged",
+      "from": [
+        32,
+        33
+      ],
+      "into": 33
+    },
+    {
+      "t": 39723,
+      "type": "merged",
+      "from": [
+        33,
+        34
+      ],
+      "into": 34
+    },
+    {
+      "t": 40703,
+      "type": "merged",
+      "from": [
+        34,
+        35
+      ],
+      "into": 35
+    },
+    {
+      "t": 42337,
+      "type": "merged",
+      "from": [
+        35,
+        36
+      ],
+      "into": 36
+    },
+    {
+      "t": 42446,
+      "type": "merged",
+      "from": [
+        36,
+        37
+      ],
+      "into": 37
+    },
+    {
+      "t": 43200,
+      "type": "draft",
+      "q": "那当前顾客的身份是怎么传到 Python 侧的？",
+      "ms": 6983
+    },
+    {
+      "t": 43357,
+      "type": "nextq",
+      "q": "那当前顾客的身份是怎么传到 Python 侧的？",
+      "reason": "他刚说 Python 不知道顾客是谁，得问清身份怎么传",
+      "kind": "probe",
+      "basis": "不知道当前登录的顾客是谁",
+      "ms": 7140
+    },
+    {
+      "t": 45170,
+      "type": "merged",
+      "from": [
+        38,
+        39
+      ],
+      "into": 39
+    },
+    {
+      "t": 45186,
+      "type": "draft",
+      "q": "换 Redis checkpointer 之后，并发怎么保证不串？",
+      "ms": 1830
+    },
+    {
+      "t": 45388,
+      "type": "nextq",
+      "q": "换 Redis checkpointer 之后，并发怎么保证不串？",
+      "reason": "他讲了持久化，没讲并发写冲突",
+      "kind": "probe",
+      "basis": "多副本部署、checkpoint",
+      "ms": 2031
+    },
+    {
+      "t": 46910,
+      "type": "merged",
+      "from": [
+        40,
+        41
+      ],
+      "into": 41
+    },
+    {
+      "t": 47277,
+      "type": "draft",
+      "q": "跨客户串台这个，你们是怎么测出来的？",
+      "ms": 1889
+    },
+    {
+      "t": 47387,
+      "type": "nextq",
+      "q": "跨客户串台这个，你们是怎么测出来的？",
+      "reason": "数据隔离事故，追问验证手段",
+      "kind": "probe",
+      "basis": "跨客户状态串台",
+      "ms": 1999
+    },
+    {
+      "t": 49396,
+      "type": "merged",
+      "from": [
+        42,
+        43
+      ],
+      "into": 43
+    },
+    {
+      "t": 49939,
+      "type": "merged",
+      "from": [
+        43,
+        44
+      ],
+      "into": 44
+    },
+    {
+      "t": 50807,
+      "type": "merged",
+      "from": [
+        44,
+        45
+      ],
+      "into": 45
+    },
+    {
+      "t": 51541,
+      "type": "draft",
+      "q": "只靠主动删的话，异常断开的会话怎么办？",
+      "ms": 4153
+    },
+    {
+      "t": 51730,
+      "type": "nextq",
+      "q": "只靠主动删的话，异常断开的会话怎么办？",
+      "reason": "他刚说两层过期，只讲了TTL那半",
+      "kind": "probe",
+      "basis": "只靠TTL的话",
+      "ms": 4342
+    },
+    {
+      "t": 53425,
+      "type": "merged",
+      "from": [
+        46,
+        47
+      ],
+      "into": 47
+    },
+    {
+      "t": 54163,
+      "type": "draft",
+      "q": "拿不到锁的请求入队，队列满了怎么办？",
+      "ms": 2432
+    },
+    {
+      "t": 54280,
+      "type": "merged",
+      "from": [
+        47,
+        48
+      ],
+      "into": 48
+    },
+    {
+      "t": 54378,
+      "type": "nextq",
+      "q": "拿不到锁的请求入队，队列满了怎么办？",
+      "reason": "串行化方案只说了入队，没提队列边界",
+      "kind": "probe",
+      "basis": "拿不到的入队等前一个跑完",
+      "ms": 2647
+    },
+    {
+      "t": 57425,
+      "type": "merged",
+      "from": [
+        49,
+        50
+      ],
+      "into": 50
+    },
+    {
+      "t": 57748,
+      "type": "draft",
+      "q": "按 thread_id 加锁，那锁超时了怎么办？",
+      "ms": 3369
+    },
+    {
+      "t": 58037,
+      "type": "nextq",
+      "q": "按 thread_id 加锁，那锁超时了怎么办？",
+      "reason": "串行化方案只说了加锁，没说锁失效",
+      "kind": "probe",
+      "basis": "按 thread_id 加分布式锁",
+      "ms": 3658
+    },
+    {
+      "t": 59380,
+      "type": "draft",
+      "q": "那剩余预算不够时，你具体怎么处理？",
+      "ms": 1342
+    },
+    {
+      "t": 59475,
+      "type": "merged",
+      "from": [
+        51,
+        52
+      ],
+      "into": 52
+    },
+    {
+      "t": 59538,
+      "type": "nextq",
+      "q": "那剩余预算不够时，你具体怎么处理？",
+      "reason": "总预算机制只讲了原则，没说实现",
+      "kind": "probe",
+      "basis": "剩余预算机制",
+      "ms": 1500
+    },
+    {
+      "t": 61324,
+      "type": "merged",
+      "from": [
+        53,
+        54
+      ],
+      "into": 54
+    }
+  ]
+}

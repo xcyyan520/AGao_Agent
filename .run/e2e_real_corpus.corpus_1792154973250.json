@@ -1,0 +1,1976 @@
+{
+  "S": "corpus_1792154973250",
+  "QUESTION": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异",
+  "ANSWER_chars": 2235,
+  "SPEED": 1,
+  "generated": [
+    "那 LangGraph 比原生 Agent 强在哪？",
+    "LangGraph 的状态图，具体怎么落到你的编排里？",
+    "那 LangGraph 具体怎么表达这个循环的？",
+    "你说的循环和条件分支，具体怎么用状态图表达？",
+    "那 LangChain 原生 Agent 做不了循环吗？",
+    "你说的循环和条件边，具体怎么落到代码里？",
+    "断点恢复具体是怎么实现的？",
+    "你说的断点恢复，具体是怎么存的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那断点恢复具体是怎么实现的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那断点恢复具体是怎么实现的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 跟 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "你说的断点恢复，具体是怎么存的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那断点恢复具体是怎么做的？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那知识库检索为什么不算一个工具？",
+    "那 LangGraph 的断点恢复具体怎么用的？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那你说说 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangGraph 的 checkpoint 你存了哪些状态？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那跨语言调用超时了，Agent 这边怎么处理？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那写操作重复建单怎么防的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那 LangGraph 的 checkpoint 具体怎么存的？",
+    "那这个订单归属校验具体在 Java 侧怎么做的？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "LangGraph 的 checkpoint 具体存了哪些状态？",
+    "MemorySaver 换 Redis 之后，状态怎么隔离？",
+    "那换成 Redis checkpointer 之后，并发怎么保证？",
+    "那你们换成 Redis checkpointer 之后怎么验证的？",
+    "那你们换 Redis checkpointer 之后，怎么验证状态真持久化了？",
+    "那你们具体怎么用状态图表达有环编排的？",
+    "那你们为什么不用 LangChain 原生 Agent 呢？",
+    "Redis checkpointer 的 setup 你调了吗？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "thread_id 带客户前缀，那跨客户串台怎么测的？",
+    "那 thread_id 具体怎么拼的，举个例子？",
+    "那 thread_id 前缀具体怎么拼的？",
+    "那 thread_id 具体是怎么拼的？",
+    "那 thread_id 具体是怎么拼的？",
+    "那长会话中途被 TTL 清掉，你们怎么发现？",
+    "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 到底差在哪？",
+    "那按会话加锁，锁的粒度会不会影响吞吐？",
+    "那两条消息同时到两个副本，锁是怎么加的？",
+    "那两条消息同时到，锁是怎么加的？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那按 thread_id 加锁，锁的粒度会不会太细？",
+    "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+    "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+    "那单次 LLM 调用超时设的多少？",
+    "那外层超时反了会出什么具体问题？",
+    "那你们为什么不用 LangChain 原生 Agent，非上 LangGraph？",
+    "那 LangGraph 比原生 Agent 强在哪？",
+    "那剩余预算具体是怎么算的？",
+    "LangGraph 相比原生 Agent 多了什么能力？",
+    "LangGraph 相比原生 Agent 具体强在哪？",
+    "那 LangChain 原生 Agent 和 LangGraph 差在哪？"
+  ],
+  "realQuestions": [
+    "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异",
+    "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的",
+    "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别",
+    "如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法"
+  ],
+  "rows": [
+    {
+      "g": "那 LangGraph 比原生 Agent 强在哪？",
+      "s": 0.7,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangGraph 的状态图，具体怎么落到你的编排里？",
+      "s": 0.4782608695652174,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "那 LangGraph 具体怎么表达这个循环的？",
+      "s": 0.45,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "你说的循环和条件分支，具体怎么用状态图表达？",
+      "s": 0.05263157894736842,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 做不了循环吗？",
+      "s": 0.6818181818181818,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "你说的循环和条件边，具体怎么落到代码里？",
+      "s": 0.058823529411764705,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "断点恢复具体是怎么实现的？",
+      "s": 0.2727272727272727,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "你说的断点恢复，具体是怎么存的？",
+      "s": 0.07692307692307693,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那断点恢复具体是怎么实现的？",
+      "s": 0.25,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那断点恢复具体是怎么实现的？",
+      "s": 0.25,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 跟 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "你说的断点恢复，具体是怎么存的？",
+      "s": 0.07692307692307693,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那断点恢复具体是怎么做的？",
+      "s": 0.09090909090909091,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那知识库检索为什么不算一个工具？",
+      "s": 0.14285714285714285,
+      "ri": 3,
+      "rq": "如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法"
+    },
+    {
+      "g": "那 LangGraph 的断点恢复具体怎么用的？",
+      "s": 0.5,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那你说说 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.6896551724137931,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangGraph 的 checkpoint 你存了哪些状态？",
+      "s": 0.4230769230769231,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那跨语言调用超时了，Agent 这边怎么处理？",
+      "s": 0.2631578947368421,
+      "ri": 3,
+      "rq": "如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那写操作重复建单怎么防的？",
+      "s": 0.09090909090909091,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangGraph 的 checkpoint 具体怎么存的？",
+      "s": 0.38461538461538464,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那这个订单归属校验具体在 Java 侧怎么做的？",
+      "s": 0.05,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.8,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangGraph 的 checkpoint 具体存了哪些状态？",
+      "s": 0.4074074074074074,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "MemorySaver 换 Redis 之后，状态怎么隔离？",
+      "s": 0.041666666666666664,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那换成 Redis checkpointer 之后，并发怎么保证？",
+      "s": 0.07407407407407407,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那你们换成 Redis checkpointer 之后怎么验证的？",
+      "s": 0.07142857142857142,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那你们换 Redis checkpointer 之后，怎么验证状态真持久化了？",
+      "s": 0.09090909090909091,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "那你们具体怎么用状态图表达有环编排的？",
+      "s": 0.058823529411764705,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那你们为什么不用 LangChain 原生 Agent 呢？",
+      "s": 0.625,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "Redis checkpointer 的 setup 你调了吗？",
+      "s": 0.07692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "thread_id 带客户前缀，那跨客户串台怎么测的？",
+      "s": 0.045454545454545456,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 thread_id 具体怎么拼的，举个例子？",
+      "s": 0.05263157894736842,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 thread_id 前缀具体怎么拼的？",
+      "s": 0.058823529411764705,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 thread_id 具体是怎么拼的？",
+      "s": 0.0625,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 thread_id 具体是怎么拼的？",
+      "s": 0.0625,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那长会话中途被 TTL 清掉，你们怎么发现？",
+      "s": 0.058823529411764705,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 到底差在哪？",
+      "s": 0.5128205128205128,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那按会话加锁，锁的粒度会不会影响吞吐？",
+      "s": 0,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那两条消息同时到两个副本，锁是怎么加的？",
+      "s": 0.058823529411764705,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那两条消息同时到，锁是怎么加的？",
+      "s": 0.07692307692307693,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那按 thread_id 加锁，锁的粒度会不会太细？",
+      "s": 0,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "s": 0.7407407407407407,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "s": 0.7407407407407407,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那单次 LLM 调用超时设的多少？",
+      "s": 0.07692307692307693,
+      "ri": 3,
+      "rq": "如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法"
+    },
+    {
+      "g": "那外层超时反了会出什么具体问题？",
+      "s": 0.07142857142857142,
+      "ri": 2,
+      "rq": "LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别"
+    },
+    {
+      "g": "那你们为什么不用 LangChain 原生 Agent，非上 LangGraph？",
+      "s": 0.6451612903225806,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangGraph 比原生 Agent 强在哪？",
+      "s": 0.7,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那剩余预算具体是怎么算的？",
+      "s": 0.09090909090909091,
+      "ri": 1,
+      "rq": "LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的"
+    },
+    {
+      "g": "LangGraph 相比原生 Agent 多了什么能力？",
+      "s": 0.6086956521739131,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "LangGraph 相比原生 Agent 具体强在哪？",
+      "s": 0.6363636363636364,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    },
+    {
+      "g": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "s": 0.7692307692307693,
+      "ri": 0,
+      "rq": "LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异"
+    }
+  ],
+  "stats": {
+    "chunks": 81,
+    "dropped": 0,
+    "merged": 2,
+    "failed": 1,
+    "latency": [
+      3789,
+      3566,
+      3358,
+      1804,
+      1392,
+      2336,
+      3570,
+      2034,
+      3566,
+      2666,
+      1724,
+      1552,
+      1093,
+      2110,
+      1281,
+      3490,
+      3060,
+      1871,
+      2764,
+      5012,
+      1762,
+      2236,
+      2001,
+      1442,
+      1794,
+      1206,
+      1990,
+      2149,
+      1629,
+      1454,
+      1717,
+      2332,
+      3742,
+      2900,
+      5203,
+      2913,
+      1682,
+      4859,
+      1578,
+      2960,
+      1621,
+      1283,
+      2027,
+      1587,
+      2120,
+      1214,
+      1045,
+      1762,
+      2289,
+      2314,
+      1789,
+      2677,
+      3830,
+      1393,
+      4806,
+      1732,
+      2666,
+      2076,
+      1603,
+      1199,
+      3397,
+      1523,
+      1729,
+      2573,
+      1785,
+      1841,
+      2010,
+      2390,
+      1959,
+      1900,
+      1287,
+      1310,
+      1657,
+      1830,
+      1036,
+      1483,
+      5804,
+      1498
+    ],
+    "draftLatency": [
+      3576,
+      3327,
+      3044,
+      1627,
+      1120,
+      2164,
+      3425,
+      1907,
+      3416,
+      2507,
+      1633,
+      1324,
+      865,
+      1905,
+      1100,
+      3319,
+      2962,
+      1700,
+      2549,
+      4770,
+      1638,
+      1985,
+      1799,
+      1316,
+      1668,
+      1063,
+      1952,
+      1964,
+      1560,
+      1264,
+      1358,
+      2224,
+      3360,
+      2750,
+      5096,
+      2701,
+      1500,
+      4669,
+      1391,
+      2937,
+      1474,
+      875,
+      1868,
+      1391,
+      1874,
+      1059,
+      886,
+      1537,
+      2036,
+      1947,
+      1650,
+      2437,
+      3484,
+      1194,
+      4605,
+      1595,
+      2483,
+      1854,
+      1420,
+      947,
+      3201,
+      1306,
+      1518,
+      2415,
+      1644,
+      1662,
+      1804,
+      2284,
+      1837,
+      1837,
+      1173,
+      1256,
+      1329,
+      1508,
+      873,
+      1150,
+      5651,
+      1355
+    ],
+    "answerChars": [
+      28,
+      57,
+      86,
+      115,
+      144,
+      171,
+      202,
+      231,
+      260,
+      285,
+      315,
+      347,
+      372,
+      401,
+      430,
+      457,
+      487,
+      517,
+      546,
+      575,
+      600,
+      629,
+      658,
+      685,
+      712,
+      739,
+      768,
+      797,
+      826,
+      855,
+      884,
+      913,
+      942,
+      971,
+      998,
+      1029,
+      1057,
+      1087,
+      1116,
+      1145,
+      1174,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200,
+      1200
+    ]
+  },
+  "log": [
+    {
+      "t": 7054,
+      "type": "draft",
+      "q": "那 LangGraph 比原生 Agent 强在哪？",
+      "ms": 3576
+    },
+    {
+      "t": 7266,
+      "type": "nextq",
+      "q": "那 LangGraph 比原生 Agent 强在哪？",
+      "reason": "他刚提 LangGraph，正好深挖选型理由",
+      "kind": "probe",
+      "basis": "用Python+LangGraph",
+      "ms": 3789
+    },
+    {
+      "t": 10594,
+      "type": "draft",
+      "q": "LangGraph 的状态图，具体怎么落到你的编排里？",
+      "ms": 3327
+    },
+    {
+      "t": 10832,
+      "type": "nextq",
+      "q": "LangGraph 的状态图，具体怎么落到你的编排里？",
+      "reason": "他刚提 LangGraph，需落到具体实现",
+      "kind": "probe",
+      "basis": "用 Python+LangGraph 做的",
+      "ms": 3566
+    },
+    {
+      "t": 13876,
+      "type": "draft",
+      "q": "那 LangGraph 具体怎么表达这个循环的？",
+      "ms": 3044
+    },
+    {
+      "t": 14190,
+      "type": "nextq",
+      "q": "那 LangGraph 具体怎么表达这个循环的？",
+      "reason": "他提了多智能体编排但没展开实现",
+      "kind": "probe",
+      "basis": "多智能体编排",
+      "ms": 3358
+    },
+    {
+      "t": 15818,
+      "type": "draft",
+      "q": "你说的循环和条件分支，具体怎么用状态图表达？",
+      "ms": 1627
+    },
+    {
+      "t": 15995,
+      "type": "nextq",
+      "q": "你说的循环和条件分支，具体怎么用状态图表达？",
+      "reason": "他提到有环编排但没展开实现",
+      "kind": "probe",
+      "basis": "带循环和条件分支",
+      "ms": 1804
+    },
+    {
+      "t": 17115,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 做不了循环吗？",
+      "ms": 1120
+    },
+    {
+      "t": 17387,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 做不了循环吗？",
+      "reason": "他刚提有环编排，正好追两者差异",
+      "kind": "probe",
+      "basis": "带循环和条件分支的状态图",
+      "ms": 1392
+    },
+    {
+      "t": 20878,
+      "type": "draft",
+      "q": "你说的循环和条件边，具体怎么落到代码里？",
+      "ms": 2164
+    },
+    {
+      "t": 21050,
+      "type": "nextq",
+      "q": "你说的循环和条件边，具体怎么落到代码里？",
+      "reason": "他刚提状态机，但没给实现细节",
+      "kind": "probe",
+      "basis": "状态机、条件边",
+      "ms": 2336
+    },
+    {
+      "t": 25145,
+      "type": "draft",
+      "q": "断点恢复具体是怎么实现的？",
+      "ms": 3425
+    },
+    {
+      "t": 25290,
+      "type": "nextq",
+      "q": "断点恢复具体是怎么实现的？",
+      "reason": "他提到断点恢复但没展开细节",
+      "kind": "probe",
+      "basis": "断点恢复、人工介入",
+      "ms": 3570
+    },
+    {
+      "t": 27197,
+      "type": "draft",
+      "q": "你说的断点恢复，具体是怎么存的？",
+      "ms": 1907
+    },
+    {
+      "t": 27325,
+      "type": "nextq",
+      "q": "你说的断点恢复，具体是怎么存的？",
+      "reason": "提到断点恢复但没展开，往下挖持久化",
+      "kind": "probe",
+      "basis": "断点恢复",
+      "ms": 2034
+    },
+    {
+      "t": 31274,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 3416
+    },
+    {
+      "t": 31423,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "候选人只对比了 Spring AI，没答原问题",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 3566
+    },
+    {
+      "t": 33931,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2507
+    },
+    {
+      "t": 34090,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了 LangGraph 优势，没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2666
+    },
+    {
+      "t": 35723,
+      "type": "draft",
+      "q": "那断点恢复具体是怎么实现的？",
+      "ms": 1633
+    },
+    {
+      "t": 35814,
+      "type": "nextq",
+      "q": "那断点恢复具体是怎么实现的？",
+      "reason": "他提了断点恢复但没展开细节",
+      "kind": "probe",
+      "basis": "断点恢复",
+      "ms": 1724
+    },
+    {
+      "t": 38258,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1324
+    },
+    {
+      "t": 38486,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "候选人只对比了 Spring AI，没答原生差异",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1552
+    },
+    {
+      "t": 40399,
+      "type": "draft",
+      "q": "那断点恢复具体是怎么实现的？",
+      "ms": 865
+    },
+    {
+      "t": 40627,
+      "type": "nextq",
+      "q": "那断点恢复具体是怎么实现的？",
+      "reason": "提到断点恢复但没展开，是状态图核心能力",
+      "kind": "probe",
+      "basis": "支持循环、条件边、断点恢复",
+      "ms": 1093
+    },
+    {
+      "t": 44566,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1905
+    },
+    {
+      "t": 44771,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是两者核心差异，候选人只讲了 Spring AI 对比",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2110
+    },
+    {
+      "t": 46808,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1100
+    },
+    {
+      "t": 46990,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "候选人只对比了 Spring AI，没答到点上",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1281
+    },
+    {
+      "t": 52078,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 3319
+    },
+    {
+      "t": 52249,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲的是对比 Spring AI，没答原生差异",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 3490
+    },
+    {
+      "t": 55212,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 跟 LangGraph 差在哪？",
+      "ms": 2962
+    },
+    {
+      "t": 55309,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 跟 LangGraph 差在哪？",
+      "reason": "问的是原生 Agent 与 LangGraph 的核心差异",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 3060
+    },
+    {
+      "t": 57010,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1700
+    },
+    {
+      "t": 57180,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了选型理由，没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1871
+    },
+    {
+      "t": 60449,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2549
+    },
+    {
+      "t": 60664,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他答的是 Java 对比，没答原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2764
+    },
+    {
+      "t": 65694,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 4770
+    },
+    {
+      "t": 65937,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是两者核心差异，他还没答",
+      "kind": "probe",
+      "basis": "LangChain 原生 Agent",
+      "ms": 5012
+    },
+    {
+      "t": 67576,
+      "type": "draft",
+      "q": "你说的断点恢复，具体是怎么存的？",
+      "ms": 1638
+    },
+    {
+      "t": 67700,
+      "type": "nextq",
+      "q": "你说的断点恢复，具体是怎么存的？",
+      "reason": "他提了断点恢复但没展开细节",
+      "kind": "probe",
+      "basis": "断点恢复",
+      "ms": 1762
+    },
+    {
+      "t": 69684,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1985
+    },
+    {
+      "t": 69935,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了 Spring AI 对比，没答原生 LangChain",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2236
+    },
+    {
+      "t": 71735,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1799
+    },
+    {
+      "t": 71937,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他答的是 Java 对比，没答原生 Agent 差异",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2001
+    },
+    {
+      "t": 73731,
+      "type": "draft",
+      "q": "那断点恢复具体是怎么做的？",
+      "ms": 1316
+    },
+    {
+      "t": 73858,
+      "type": "nextq",
+      "q": "那断点恢复具体是怎么做的？",
+      "reason": "他提了断点恢复却没展开细节",
+      "kind": "probe",
+      "basis": "断点恢复",
+      "ms": 1442
+    },
+    {
+      "t": 77213,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1668
+    },
+    {
+      "t": 77340,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是原题，他还没正面答",
+      "kind": "probe",
+      "basis": "LangChain 原生 Agent",
+      "ms": 1794
+    },
+    {
+      "t": 79628,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1063
+    },
+    {
+      "t": 79771,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了 LangGraph 优势，没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1206
+    },
+    {
+      "t": 83089,
+      "type": "draft",
+      "q": "那知识库检索为什么不算一个工具？",
+      "ms": 1952
+    },
+    {
+      "t": 83127,
+      "type": "nextq",
+      "q": "那知识库检索为什么不算一个工具？",
+      "reason": "他列了 8 个工具，没说清检索为何排除",
+      "kind": "probe",
+      "basis": "知识库检索不在工具清单里",
+      "ms": 1990
+    },
+    {
+      "t": 86222,
+      "type": "draft",
+      "q": "那 LangGraph 的断点恢复具体怎么用的？",
+      "ms": 1964
+    },
+    {
+      "t": 86406,
+      "type": "nextq",
+      "q": "那 LangGraph 的断点恢复具体怎么用的？",
+      "reason": "他提了断点恢复但没展开，往深里问",
+      "kind": "probe",
+      "basis": "断点恢复、人工介入",
+      "ms": 2149
+    },
+    {
+      "t": 88863,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1560
+    },
+    {
+      "t": 88932,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是原题，他还没正面回答",
+      "kind": "probe",
+      "basis": "Python侧用LangChain的",
+      "ms": 1629
+    },
+    {
+      "t": 91624,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1264
+    },
+    {
+      "t": 91815,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了分工，没讲原生 Agent 的局限",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 1454
+    },
+    {
+      "t": 94757,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1358
+    },
+    {
+      "t": 95116,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是核心差异，他还没正面答",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 1717
+    },
+    {
+      "t": 98677,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2224
+    },
+    {
+      "t": 98784,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了分工，但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangChain 负责工具声明",
+      "ms": 2332
+    },
+    {
+      "t": 102867,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 3360
+    },
+    {
+      "t": 103249,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他刚说两库分工，正好追问核心差异",
+      "kind": "probe",
+      "basis": "LangChain 负责工具声明",
+      "ms": 3742
+    },
+    {
+      "t": 105999,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2750
+    },
+    {
+      "t": 106149,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是核心差异，他还没正面回答",
+      "kind": "probe",
+      "basis": "LangChain 原生 Agent",
+      "ms": 2900
+    },
+    {
+      "t": 111245,
+      "type": "draft",
+      "q": "那你说说 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 5096
+    },
+    {
+      "t": 111352,
+      "type": "nextq",
+      "q": "那你说说 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了分工，但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "两者是同一生态里的两层",
+      "ms": 5203
+    },
+    {
+      "t": 114053,
+      "type": "draft",
+      "q": "LangGraph 的 checkpoint 你存了哪些状态？",
+      "ms": 2701
+    },
+    {
+      "t": 114265,
+      "type": "nextq",
+      "q": "LangGraph 的 checkpoint 你存了哪些状态？",
+      "reason": "他讲了编排，没讲状态里到底存什么",
+      "kind": "probe",
+      "basis": "checkpoint",
+      "ms": 2913
+    },
+    {
+      "t": 115766,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1500
+    },
+    {
+      "t": 115947,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他讲了分工，但没对比两者本质差异",
+      "kind": "probe",
+      "basis": "LangChain 声明、LangGraph 编排",
+      "ms": 1682
+    },
+    {
+      "t": 120616,
+      "type": "draft",
+      "q": "那跨语言调用超时了，Agent 这边怎么处理？",
+      "ms": 4669
+    },
+    {
+      "t": 120806,
+      "type": "nextq",
+      "q": "那跨语言调用超时了，Agent 这边怎么处理？",
+      "reason": "跨语言调用是刚提的细节，追问失败路径",
+      "kind": "probe",
+      "basis": "调用链是跨语言的",
+      "ms": 4859
+    },
+    {
+      "t": 122198,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1391
+    },
+    {
+      "t": 122384,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是两者核心差异，他刚只讲了分工",
+      "kind": "probe",
+      "basis": "LangChain 负责工具声明",
+      "ms": 1578
+    },
+    {
+      "t": 125321,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 2937
+    },
+    {
+      "t": 125344,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他刚提两者分工，但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangChain 负责工具声明",
+      "ms": 2960
+    },
+    {
+      "t": 126818,
+      "type": "draft",
+      "q": "那写操作重复建单怎么防的？",
+      "ms": 1474
+    },
+    {
+      "t": 126966,
+      "type": "nextq",
+      "q": "那写操作重复建单怎么防的？",
+      "reason": "他刚提到写操作安全边界，话没说完",
+      "kind": "probe",
+      "basis": "createTicket 安全边界",
+      "ms": 1621
+    },
+    {
+      "t": 127841,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 875
+    },
+    {
+      "t": 128248,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是两者核心差异，他还没正面答",
+      "kind": "probe",
+      "basis": "LangChain 负责工具声明",
+      "ms": 1283
+    },
+    {
+      "t": 131301,
+      "type": "draft",
+      "q": "那 LangGraph 的 checkpoint 具体怎么存的？",
+      "ms": 1868
+    },
+    {
+      "t": 131460,
+      "type": "nextq",
+      "q": "那 LangGraph 的 checkpoint 具体怎么存的？",
+      "reason": "他讲了编排优势，没讲状态持久化细节",
+      "kind": "probe",
+      "basis": "checkpoint",
+      "ms": 2027
+    },
+    {
+      "t": 133938,
+      "type": "draft",
+      "q": "那这个订单归属校验具体在 Java 侧怎么做的？",
+      "ms": 1391
+    },
+    {
+      "t": 134134,
+      "type": "nextq",
+      "q": "那这个订单归属校验具体在 Java 侧怎么做的？",
+      "reason": "安全边界只说了\"必须在Java侧\"，没展开",
+      "kind": "probe",
+      "basis": "这个校验必须在 Java 侧做",
+      "ms": 1587
+    },
+    {
+      "t": 137482,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1874
+    },
+    {
+      "t": 137729,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是原生 Agent 与状态图编排的差异",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 2120
+    },
+    {
+      "t": 139693,
+      "type": "draft",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1059
+    },
+    {
+      "t": 139848,
+      "type": "nextq",
+      "q": "LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "问的是两者核心差异，他还没正面答",
+      "kind": "probe",
+      "basis": "LangChain 原生 Agent 与 LangGraph",
+      "ms": 1214
+    },
+    {
+      "t": 142573,
+      "type": "draft",
+      "q": "LangGraph 的 checkpoint 具体存了哪些状态？",
+      "ms": 886
+    },
+    {
+      "t": 142732,
+      "type": "nextq",
+      "q": "LangGraph 的 checkpoint 具体存了哪些状态？",
+      "reason": "他刚提到有状态编排，往持久化细节深挖",
+      "kind": "probe",
+      "basis": "LangGraph 的核心卖点是有状态编排",
+      "ms": 1045
+    },
+    {
+      "t": 146278,
+      "type": "draft",
+      "q": "MemorySaver 换 Redis 之后，状态怎么隔离？",
+      "ms": 1537
+    },
+    {
+      "t": 146503,
+      "type": "nextq",
+      "q": "MemorySaver 换 Redis 之后，状态怎么隔离？",
+      "reason": "他刚提到默认内存存储，正卡在持久化上",
+      "kind": "probe",
+      "basis": "默认的 MemorySaver",
+      "ms": 1762
+    },
+    {
+      "t": 149838,
+      "type": "draft",
+      "q": "那换成 Redis checkpointer 之后，并发怎么保证？",
+      "ms": 2036
+    },
+    {
+      "t": 150091,
+      "type": "nextq",
+      "q": "那换成 Redis checkpointer 之后，并发怎么保证？",
+      "reason": "他刚讲到 MemorySaver 多副本失忆，正是深挖点",
+      "kind": "probe",
+      "basis": "MemorySaver 是纯内存的",
+      "ms": 2289
+    },
+    {
+      "t": 152735,
+      "type": "draft",
+      "q": "那你们换成 Redis checkpointer 之后怎么验证的？",
+      "ms": 1947
+    },
+    {
+      "t": 153102,
+      "type": "nextq",
+      "q": "那你们换成 Redis checkpointer 之后怎么验证的？",
+      "reason": "他刚提到 MemorySaver 失忆，深挖替换方案",
+      "kind": "probe",
+      "basis": "MemorySaver 是纯内存的",
+      "ms": 2314
+    },
+    {
+      "t": 155563,
+      "type": "draft",
+      "q": "那你们换 Redis checkpointer 之后，怎么验证状态真持久化了？",
+      "ms": 1650
+    },
+    {
+      "t": 155702,
+      "type": "nextq",
+      "q": "那你们换 Redis checkpointer 之后，怎么验证状态真持久化了？",
+      "reason": "他刚提状态持久化，但没说怎么验证",
+      "kind": "probe",
+      "basis": "换 Redis checkpointer",
+      "ms": 1789
+    },
+    {
+      "t": 159398,
+      "type": "draft",
+      "q": "那你们具体怎么用状态图表达有环编排的？",
+      "ms": 2437
+    },
+    {
+      "t": 159638,
+      "type": "nextq",
+      "q": "那你们具体怎么用状态图表达有环编排的？",
+      "reason": "他讲了选型理由，没讲实际图结构",
+      "kind": "probe",
+      "basis": "状态图模型跟这个场景更匹配",
+      "ms": 2677
+    },
+    {
+      "t": 163491,
+      "type": "draft",
+      "q": "那你们为什么不用 LangChain 原生 Agent 呢？",
+      "ms": 3484
+    },
+    {
+      "t": 163837,
+      "type": "nextq",
+      "q": "那你们为什么不用 LangChain 原生 Agent 呢？",
+      "reason": "他讲了 LangGraph 优势，没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 3830
+    },
+    {
+      "t": 165031,
+      "type": "draft",
+      "q": "Redis checkpointer 的 setup 你调了吗？",
+      "ms": 1194
+    },
+    {
+      "t": 165231,
+      "type": "nextq",
+      "q": "Redis checkpointer 的 setup 你调了吗？",
+      "reason": "他正讲到换 Redis checkpointer，可追问落地细节",
+      "kind": "probe",
+      "basis": "换Redischeckpointer",
+      "ms": 1393
+    },
+    {
+      "t": 170691,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 4605
+    },
+    {
+      "t": 170892,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "他提到有环编排但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 那种有环编排",
+      "ms": 4806
+    },
+    {
+      "t": 172487,
+      "type": "draft",
+      "q": "thread_id 带客户前缀，那跨客户串台怎么测的？",
+      "ms": 1595
+    },
+    {
+      "t": 172623,
+      "type": "nextq",
+      "q": "thread_id 带客户前缀，那跨客户串台怎么测的？",
+      "reason": "他刚说 thread_id 要带客户标识，追问验证手段",
+      "kind": "probe",
+      "basis": "thread_id 必须带客户标识前缀",
+      "ms": 1732
+    },
+    {
+      "t": 175106,
+      "type": "draft",
+      "q": "那 thread_id 具体怎么拼的，举个例子？",
+      "ms": 2483
+    },
+    {
+      "t": 175290,
+      "type": "nextq",
+      "q": "那 thread_id 具体怎么拼的，举个例子？",
+      "reason": "他正说到关键处被打断，需补全细节",
+      "kind": "probe",
+      "basis": "thread_id 必须带客户标识前缀",
+      "ms": 2666
+    },
+    {
+      "t": 177144,
+      "type": "draft",
+      "q": "那 thread_id 前缀具体怎么拼的？",
+      "ms": 1854
+    },
+    {
+      "t": 177366,
+      "type": "nextq",
+      "q": "那 thread_id 前缀具体怎么拼的？",
+      "reason": "状态隔离关键点，只说了要加前缀",
+      "kind": "probe",
+      "basis": "thread_id 必须带客户标识前缀",
+      "ms": 2076
+    },
+    {
+      "t": 179360,
+      "type": "draft",
+      "q": "那 thread_id 具体是怎么拼的？",
+      "ms": 1420
+    },
+    {
+      "t": 179542,
+      "type": "nextq",
+      "q": "那 thread_id 具体是怎么拼的？",
+      "reason": "他提到带客户前缀但没给拼接规则",
+      "kind": "probe",
+      "basis": "thread_id 必须带客户标识前缀",
+      "ms": 1603
+    },
+    {
+      "t": 181927,
+      "type": "draft",
+      "q": "那 thread_id 具体是怎么拼的？",
+      "ms": 947
+    },
+    {
+      "t": 182179,
+      "type": "nextq",
+      "q": "那 thread_id 具体是怎么拼的？",
+      "reason": "他刚提到带客户前缀，但没说拼法",
+      "kind": "probe",
+      "basis": "thread_id 必须带客户标识前缀",
+      "ms": 1199
+    },
+    {
+      "t": 187230,
+      "type": "draft",
+      "q": "那长会话中途被 TTL 清掉，你们怎么发现？",
+      "ms": 3201
+    },
+    {
+      "t": 187426,
+      "type": "nextq",
+      "q": "那长会话中途被 TTL 清掉，你们怎么发现？",
+      "reason": "他刚说只靠 TTL 会失忆，追问兜底",
+      "kind": "probe",
+      "basis": "只靠 TTL 的话",
+      "ms": 3397
+    },
+    {
+      "t": 188732,
+      "type": "draft",
+      "q": "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 到底差在哪？",
+      "ms": 1306
+    },
+    {
+      "t": 188950,
+      "type": "nextq",
+      "q": "你刚说 LangGraph 负责状态图编排，那它和 LangChain 原生 Agent 到底差在哪？",
+      "reason": "他讲了分工但没正面答核心差异",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 1523
+    },
+    {
+      "t": 191572,
+      "type": "draft",
+      "q": "那按会话加锁，锁的粒度会不会影响吞吐？",
+      "ms": 1518
+    },
+    {
+      "t": 191783,
+      "type": "nextq",
+      "q": "那按会话加锁，锁的粒度会不会影响吞吐？",
+      "reason": "并发串行化刚提到，追问锁粒度代价",
+      "kind": "probe",
+      "basis": "并发要按会话",
+      "ms": 1729
+    },
+    {
+      "t": 195562,
+      "type": "draft",
+      "q": "那两条消息同时到两个副本，锁是怎么加的？",
+      "ms": 2415
+    },
+    {
+      "t": 195720,
+      "type": "nextq",
+      "q": "那两条消息同时到两个副本，锁是怎么加的？",
+      "reason": "他刚提到按会话串行，但没说锁的实现",
+      "kind": "probe",
+      "basis": "按会话串行",
+      "ms": 2573
+    },
+    {
+      "t": 197809,
+      "type": "draft",
+      "q": "那两条消息同时到，锁是怎么加的？",
+      "ms": 1644
+    },
+    {
+      "t": 197949,
+      "type": "nextq",
+      "q": "那两条消息同时到，锁是怎么加的？",
+      "reason": "他刚说到并发串行，细节没讲",
+      "kind": "probe",
+      "basis": "都去读同一个thread_id",
+      "ms": 1785
+    },
+    {
+      "t": 200843,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1662
+    },
+    {
+      "t": 201022,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "材料里两库分工是核心，需他讲清差异",
+      "kind": "probe",
+      "basis": "LangGraph负责状态图编排",
+      "ms": 1841
+    },
+    {
+      "t": 204067,
+      "type": "draft",
+      "q": "那按 thread_id 加锁，锁的粒度会不会太细？",
+      "ms": 1804
+    },
+    {
+      "t": 204273,
+      "type": "nextq",
+      "q": "那按 thread_id 加锁，锁的粒度会不会太细？",
+      "reason": "并发串行方案刚讲完，追问锁粒度与失败处理",
+      "kind": "probe",
+      "basis": "按 thread_id 加分布式锁",
+      "ms": 2010
+    },
+    {
+      "t": 207582,
+      "type": "draft",
+      "q": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "ms": 2284
+    },
+    {
+      "t": 207688,
+      "type": "nextq",
+      "q": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "reason": "他讲了分工，但没对比原生 Agent",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 2390
+    },
+    {
+      "t": 210141,
+      "type": "draft",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "ms": 1837
+    },
+    {
+      "t": 210263,
+      "type": "nextq",
+      "q": "那 LangChain 原生 Agent 和 LangGraph 差在哪？",
+      "reason": "候选人只讲了分工，没答核心差异",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 1959
+    },
+    {
+      "t": 213237,
+      "type": "draft",
+      "q": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "ms": 1837
+    },
+    {
+      "t": 213300,
+      "type": "nextq",
+      "q": "那不用 LangGraph，LangChain 原生 Agent 差在哪？",
+      "reason": "他讲了分工，但没对比原生 Agent 的短板",
+      "kind": "probe",
+      "basis": "LangGraph 负责状态图编排",
+      "ms": 1900
+    },
+    {
+      "t": 215618,
+      "type": "draft",
+      "q": "那单次 LLM 调用超时设的多少？",
+      "ms": 1173
+    },
+    {
+      "t": 215732,
+      "type": "nextq",
+      "q": "那单次 LLM 调用超时设的多少？",
+      "reason": "超时分层只说到一半，缺最内层数字",
+      "kind": "probe",
+      "basis": "单次LLM调用",
+      "ms": 1287
+    },
+    {
+      "t": 218729,
+      "type": "draft",
+      "q": "那外层超时反了会出什么具体问题？",
+      "ms": 1256
+    },
+    {
+      "t": 218783,
+      "type": "nextq",
+      "q": "那外层超时反了会出什么具体问题？",
+      "reason": "他刚讲超时分层，只说了规则没说后果",
+      "kind": "probe",
+      "basis": "外层超时必须大于内层",
+      "ms": 1310
+    },
+    {
+      "t": 221857,
+      "type": "draft",
+      "q": "那你们为什么不用 LangChain 原生 Agent，非上 LangGraph？",
+      "ms": 1329
+    },
+    {
+      "t": 222185,
+      "type": "nextq",
+      "q": "那你们为什么不用 LangChain 原生 Agent，非上 LangGraph？",
+      "reason": "材料强调有环编排，需他讲清原生 Agent 差在哪",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1657
+    },
+    {
+      "t": 225097,
+      "type": "draft",
+      "q": "那 LangGraph 比原生 Agent 强在哪？",
+      "ms": 1508
+    },
+    {
+      "t": 225419,
+      "type": "nextq",
+      "q": "那 LangGraph 比原生 Agent 强在哪？",
+      "reason": "材料只讲了 LangGraph 好处，没对比原生",
+      "kind": "probe",
+      "basis": "LangGraph 把 Agent 建模成状态机",
+      "ms": 1830
+    },
+    {
+      "t": 227514,
+      "type": "draft",
+      "q": "那剩余预算具体是怎么算的？",
+      "ms": 873
+    },
+    {
+      "t": 227677,
+      "type": "nextq",
+      "q": "那剩余预算具体是怎么算的？",
+      "reason": "他刚提到剩余预算机制但没展开",
+      "kind": "probe",
+      "basis": "剩余预算机制",
+      "ms": 1036
+    },
+    {
+      "t": 230831,
+      "type": "draft",
+      "q": "LangGraph 相比原生 Agent 多了什么能力？",
+      "ms": 1150
+    },
+    {
+      "t": 231163,
+      "type": "nextq",
+      "q": "LangGraph 相比原生 Agent 多了什么能力？",
+      "reason": "他讲了持久化，但没对比原生 Agent 差异",
+      "kind": "probe",
+      "basis": "LangGraph 的核心卖点是有状态编排",
+      "ms": 1483
+    },
+    {
+      "t": 238813,
+      "type": "merged",
+      "from": [
+        78,
+        79
+      ],
+      "into": 79
+    },
+    {
+      "t": 240741,
+      "type": "error",
+      "msg": "This operation was aborted"
+    },
+    {
+      "t": 243663,
+      "type": "merged",
+      "from": [
+        80,
+        81
+      ],
+      "into": 81
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+LangChain 原生 Agent 与 LangGraph 实现的 Agent 的核心差异
+
+LangGraph的图式架构，怎么实现 “自主能力” 与 “稳定可控” 的平衡的
+
+LangGraph 的状态（State）机制，和传统 LangChain Chain 中沿链路传递上下文的方式，有什么本质区别
+
+如果线上出现 Agent 反复调用同一个 RAG 工具、始终无法生成最终回答的死循环问题，基于 LangGraph 的能力，描述你的排查路径与定位方法

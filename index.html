@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>边说边出题 · 原型</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --fg:#e6e9ef; --dim:#8b94a7; --dim2:#5f6779;
+    --ok:#3fb950; --err:#f85149; --vague:#d29922; --off:#a371f7; --unc:#58a6ff;
+    --accent:#2f81f7;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{
+    padding:10px 14px; border-bottom:1px solid var(--line); background:var(--panel);
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex:0 0 auto;
+  }
+  header h1{font-size:15px; margin:0; font-weight:600; letter-spacing:.3px}
+  .pill{
+    font-size:11px; padding:2px 8px; border-radius:20px;
+    background:var(--panel2); color:var(--dim); border:1px solid var(--line);
+  }
+  .pill.live{color:var(--ok); border-color:#1f4d29}
+  .pill.warn{color:var(--vague); border-color:#4d3d1f}
+  /* 空状态的 pill 不显示：否则页头会挂着两个光秃秃的「—」，
+     在窄屏上还会把标题挤到第二行。有内容时才让它出现。 */
+  .pill:empty{display:none}
+  .grow{flex:1}
+  button{
+    background:var(--panel2); color:var(--fg); border:1px solid var(--line);
+    padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; font-family:inherit;
+    transition:.15s;
+  }
+  button:hover:not(:disabled){background:#262b36; border-color:#3a4150}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:500}
+  button.primary:hover:not(:disabled){background:#1f6feb}
+  button.danger{color:var(--err); border-color:#4d2426}
+
+  main{flex:1; display:flex; min-height:0}
+
+  /* 左：材料 + 控制 */
+  .side{
+    width:320px; flex:0 0 320px; border-right:1px solid var(--line);
+    background:var(--panel); display:flex; flex-direction:column; min-height:0;
+    /* overflow-y:auto 是必须的，不能靠默认的 visible。
+       窄屏时 .side 被 max-height 压住，而两段 section 的最低高度之和大于这个
+       上限；visible 会让超出的内容直接盖到下一段上（实测「保存材料」和
+       「语速」两行叠在一起）。auto 让它变成滚动。 */
+    overflow-y:auto;
+  }
+  .side section{padding:12px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; min-height:0}
+  .side h2{
+    font-size:12px; margin:0 0 8px; color:var(--dim); font-weight:600;
+    text-transform:uppercase; letter-spacing:.6px;
+  }
+  textarea{
+    width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line);
+    border-radius:6px; padding:8px; font:12px/1.5 ui-monospace,Consolas,monospace;
+    resize:vertical; font-family:ui-monospace,Consolas,monospace;
+  }
+  textarea:focus{outline:none; border-color:var(--accent)}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .row.mt{margin-top:8px}
+  input[type=text],input[type=password],input[type=number]{
+    background:var(--bg); color:var(--fg); border:1px solid var(--line);
+    border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit;
+  }
+  input:focus{outline:none; border-color:var(--accent)}
+  label.f{font-size:11px; color:var(--dim); display:block; margin-bottom:3px}
+  .field{margin-bottom:8px}
+
+  /* 右：出题流 */
+  .stream{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0}
+  .qbar{
+    padding:10px 14px; border-bottom:1px solid var(--line); background:var(--panel);
+    display:flex; gap:8px; align-items:center; flex:0 0 auto;
+  }
+  .qbar input{flex:1}
+  .feed{flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px}
+  .feed::-webkit-scrollbar{width:8px}
+  .feed::-webkit-scrollbar-thumb{background:#333a47; border-radius:4px}
+
+  /* ── 下一个问题：这是整个界面的主角，不再是一堆判断卡片 ──
+     字号刻意放大到 17px：面试官是在听人说话的间隙扫一眼，
+     不是坐着读文章。扫不到就等于没出。 */
+  .nextq{
+    margin:12px 14px 0; padding:12px 14px; border-radius:10px; flex:0 0 auto;
+    background:linear-gradient(180deg,#16202e,#141922);
+    border:1px solid #2a3f5a;
+  }
+  .nextq.ready{
+    border-color:#2f6b3a;
+    background:linear-gradient(180deg,#152318,#141922);
+  }
+  .nextq .nq-head{display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap}
+  .nextq .nq-title{
+    font-size:11px; letter-spacing:.8px; color:var(--dim); font-weight:600;
+    text-transform:uppercase;
+  }
+  .nextq .nq-grow{flex:1}
+  .nextq .nq-q{
+    font-size:17px; line-height:1.5; font-weight:600; color:var(--fg);
+    min-height:26px; word-break:break-word;
+  }
+  .nextq .nq-q.wait{color:var(--dim2); font-weight:400; font-size:14px}
+  .nextq .nq-meta{
+    font-size:12.5px; color:var(--dim); margin-top:8px;
+    display:flex; flex-direction:column; gap:3px;
+  }
+  .nextq .nq-meta .k{color:var(--dim2); margin-right:6px}
+  .nextq .lat{font:11px ui-monospace,monospace; color:var(--dim2)}
+  .nq-cursor{animation:b .8s step-end infinite; color:var(--accent)}
+  @keyframes b{50%{opacity:0}}
+
+  .badge{font-size:11px; font-weight:600; padding:1px 8px; border-radius:4px; flex:0 0 auto}
+  .badge.probe{background:#122a45; color:var(--unc)}
+  .badge.fresh{background:#2a1d43; color:var(--off)}
+  .badge.wrap{background:#12351c; color:var(--ok)}
+
+  /* 候选人说的话：按「一段回答」累积成一块。
+     不能每切一块就多一个方块——面试官看的是他讲了什么，不是切块器的输出。 */
+  .saidblock{
+    font-size:13.5px; color:var(--dim); line-height:1.75;
+    border-left:2px solid #2a3f5a; padding:4px 0 4px 10px;
+    white-space:pre-wrap; word-break:break-word; animation:in .18s ease-out;
+  }
+  @keyframes in{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
+
+  /* 出题历史：一行一条，事后能回看 AI 到底建议过什么 */
+  .qlog{
+    display:flex; gap:8px; align-items:baseline; font-size:12.5px;
+    border-left:2px solid var(--line); padding:2px 0 2px 8px; color:var(--dim);
+  }
+  .qlog .t{font:11px ui-monospace,monospace; color:var(--dim2); flex:0 0 auto}
+  .qlog .qq{color:var(--fg); flex:1; word-break:break-word}
+
+  .empty{color:var(--dim2); text-align:center; padding:40px 20px; font-size:13px; line-height:1.9}
+  .stats{
+    padding:8px 14px; border-top:1px solid var(--line); background:var(--panel);
+    display:flex; gap:16px; font:11px ui-monospace,Consolas,monospace; color:var(--dim);
+    flex-wrap:wrap; flex:0 0 auto;
+  }
+  .stats b{color:var(--fg); font-weight:600}
+  @media(max-width:900px){
+    main{flex-direction:column}
+    /* 侧栏在矮屏上「滚动」而不是「溢出」。
+       之前 .side 是 overflow:visible，max-height 压住后两段 section 的内容
+       直接盖到一起（实测「保存材料」和「语速」两行叠在同一个位置）。
+       不给 section / textarea 设立固定高度——那会在 900px 附近把两段
+       挤到互相覆盖，是修一个 bug 引入另一个。 */
+    .side{
+      width:auto; flex:0 0 auto; max-height:42vh; min-height:0;
+      border-right:none; border-bottom:1px solid var(--line);
+      overflow-y:auto;
+    }
+    /* 手机上把出题区放到最上面。面试进行中最该一直看到的是「下一个问题」，
+       而材料框和回放按钮是准备动作。不调顺序的话，手机上要先滚过材料和
+       回放控件才看得到题——那"尽早"两个字就白写了。 */
+    .stream{order:1}
+    .side{order:2}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>边说边出题</h1>
+  <span class="pill" id="connPill">连接中…</span>
+  <span class="pill" id="modelPill"></span>
+  <div class="grow"></div>
+  <span class="pill" id="progPill" title="AI 根据他说的话出了几次题。次数追上块数就说明跟得上"></span>
+  <button id="btnSettings">⚙ 设置</button>
+  <button id="btnSummary">导出复盘</button>
+  <button id="btnReset" class="danger">重置</button>
+</header>
+
+<main>
+  <aside class="side">
+    <!-- 关键：材料区可以「长大」，但不能被「压扁」。
+         它原来是 flex:1 1 auto，是 flex 列里唯一的可伸缩项；高度不够时会被
+         压到比内容还矮，而里面 textarea 的 min-height:120px 压不下去，内容
+         于是溢出到下一段上——实测「模拟候选人说话」和「保存材料 / 0 字」
+         两行叠在同一个位置。
+         现在改成 flex:1 1 auto + min-height（按内容算出的下限），配合 .side
+         的 overflow-y:auto：够高就撑满，不够高就整条滚动，绝不重叠。 -->
+    <section style="flex:1 1 auto; min-height:236px">
+      <h2>面试材料（出题的依据）</h2>
+      <textarea id="materials" style="flex:1 1 auto; min-height:120px"
+        placeholder="把候选人的逐字稿、项目资料粘进来。&#10;&#10;AI 出题的依据就是这里。&#10;不填的话它只能顺着他的话表面往下问，问不到『和他自己材料对不上』这类最有价值的地方。"></textarea>
+      <div class="row mt" style="flex:0 0 auto">
+        <button id="btnSaveMat">保存材料</button>
+        <span class="pill" id="matStat">0 字</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>模拟候选人说话</h2>
+      <textarea id="replayText" style="height:88px"
+        placeholder="粘一段真实面试回答。点『开始回放』后，它会按真人语速（约 4 字/100ms）逐字喂进去，模拟边说边出题。"></textarea>
+      <div class="row mt">
+        <label class="f" style="margin:0">语速</label>
+        <input type="number" id="cps" value="4" min="1" max="12" style="width:56px">
+        <span class="pill">字/100ms</span>
+        <div class="grow"></div>
+      </div>
+      <!-- 「开始回放 / 停止」单独一行：和「语速 4 字/100ms」挤在一行时，
+           320px 宽的侧栏放不下，两个按钮会被折到第二行显得很乱。 -->
+      <div class="row mt">
+        <button id="btnReplay" class="primary" style="flex:1">▶ 开始回放</button>
+        <button id="btnStop" disabled style="flex:0 0 auto">■ 停止</button>
+      </div>
+    </section>
+
+    <section id="settings" style="display:none">
+      <h2>模型设置</h2>
+      <div class="field"><label class="f">Base URL</label>
+        <input type="text" id="cfgBase" style="width:100%"></div>
+      <div class="field"><label class="f">模型名</label>
+        <input type="text" id="cfgModel" style="width:100%"></div>
+      <div class="field"><label class="f">API Key（只发给本地服务，不落盘）</label>
+        <input type="password" id="cfgKey" style="width:100%" placeholder="留空则用启动时的环境变量"></div>
+      <div class="row"><button id="btnSaveCfg" class="primary">应用</button>
+        <span class="pill" id="cfgStat"></span></div>
+    </section>
+  </aside>
+
+  <div class="stream">
+    <!-- 常驻在顶部：下一个问题。它随候选人说话不断被重写；
+         等他停下来的时候，这里已经有一道题等着了——这就是"尽早"。 -->
+    <div class="nextq" id="nextq">
+      <div class="nq-head">
+        <span class="nq-title">下一个问题</span>
+        <span class="pill" id="nqState">还没开始</span>
+        <span class="nq-grow"></span>
+        <span class="lat" id="nqMs"></span>
+      </div>
+      <div class="nq-q wait" id="nqQ">贴一段回答到左边，点「开始回放」。</div>
+      <div class="nq-meta" id="nqMeta"></div>
+    </div>
+
+    <div class="qbar">
+      <input type="text" id="question" placeholder="你实际问出口的问题（回车记录，后面出题会以它为上下文）">
+      <button id="btnAsk" class="primary">记录并提问</button>
+    </div>
+
+    <div class="feed" id="feed">
+      <div class="empty" id="emptyHint">
+        还没有内容。<br>
+        贴一段回答到左边，点「开始回放」，<br>
+        上面就会跟着他的话出下一道题。
+      </div>
+    </div>
+
+    <div class="stats">
+      <span>已听 <b id="stChunks">0</b> 块</span>
+      <span>已出题 <b id="stApplied">0</b> 次</span>
+      <span>合并 <b id="stMerged">0</b> 次</span>
+      <span>首字 p50 <b id="stFirst">—</b></span>
+      <span>整轮 p50 <b id="stP50">—</b></span>
+      <span>p90 <b id="stP90">—</b></span>
+      <span>回答 <b id="stMem">0</b> 字</span>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const SESSION = new URLSearchParams(location.search).get('s') || 'default';
+
+/* ── 出题类型的中文名 ── */
+const TYPE_LABEL = { probe:'追问', fresh:'新方向', wrap:'收尾' };
+
+/* 进度显示用：把"第几块"还原成"面试者的第几句话"。
+   块号是给机器看的，面试官看的是候选人说到第几句了。 */
+const CN = n => {
+  const d = ['零','一','二','三','四','五','六','七','八','九'];
+  if(n <= 10) return n === 10 ? '十' : d[n];
+  if(n < 20) return '十' + d[n-10];
+  return String(n);
+};
+
+let saidEl = null;       // 候选人这一段回答累积在哪个元素里
+let nqSeq = -1;          // 顶部面板上这条建议对应的块号
+let gotDraft = false;    // 这一块的问题是否已经提前上屏过
+
+/* ── 事件流 ── */
+function connect(){
+  const es = new EventSource(`/events?s=${encodeURIComponent(SESSION)}`);
+
+  es.onopen = () => {
+    $('connPill').textContent = '已连接';
+    $('connPill').className = 'pill live';
+  };
+  es.onerror = () => {
+    $('connPill').textContent = '断开，重连中…';
+    $('connPill').className = 'pill warn';
+  };
+
+  es.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    handle(m);
+  };
+}
+
+function handle(m){
+  switch(m.type){
+    case 'chunk':
+      // 一块被切出来了，先把它接到候选人"正在说"的那段话后面
+      appendSaid(m.text);
+      break;
+
+    case 'judging':
+      // 这一块的推理开始了。别让面板还停在上一题上让人误会。
+      showThinking(m);
+      break;
+
+    case 'draft':
+      // 问题那一行先从流里出来了 —— 立刻上屏，不等理由
+      showDraft(m);
+      break;
+
+    case 'nextq':
+      showNext(m);
+      break;
+
+    case 'merged':
+      flash(`AI 没跟上语速，已把第 ${CN(m.from[0])}、${CN(m.from[1])} 块合并后一起出题（内容没丢）`);
+      break;
+
+    case 'stale':
+      // 迟到结果本来就不该覆盖新结果，是设计行为，不必打扰面试官
+      break;
+
+    case 'question':
+      addNotice(`— 你实际问出口了：${esc(m.question)} —`);
+      resetPanel();
+      break;
+
+    case 'judge_error':
+      addNotice(`出题失败：${esc(m.message)}`, true);
+      setState('出题失败', 'warn');
+      break;
+
+    case 'replay_end':
+      $('btnReplay').disabled = false;
+      $('btnStop').disabled = true;
+      addNotice(m.aborted ? '回放已中止。' : '回放结束。');
+      refreshState();
+      break;
+  }
+}
+
+/* ── 渲染 ── */
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function hideEmpty(){ const e = $('emptyHint'); if(e) e.remove(); }
+
+/* 候选人说的话按「一段回答」累积成一块。
+   不能每切一块就在屏幕上多一个方块——面试官要看的是他讲了什么，
+   不是切块器的输出。切块是给 AI 用的，不是给他看的。 */
+function appendSaid(text){
+  hideEmpty();
+  if(!saidEl){
+    saidEl = document.createElement('div');
+    saidEl.className = 'saidblock';
+    $('feed').appendChild(saidEl);
+  }
+  saidEl.textContent += text;
+  scroll();
+}
+
+function setState(txt, cls){
+  const p = $('nqState');
+  p.textContent = txt;
+  p.className = 'pill' + (cls ? ' ' + cls : '');
+}
+
+/* 这一块的推理开始了。只有在这一块还没提前上屏过的时候才把状态压回
+   「正在想」——否则会把刚显示出来的问题又盖掉。 */
+function showThinking(m){
+  if(nqSeq !== m.seq){ nqSeq = m.seq; gotDraft = false; }
+  if(!gotDraft) setState('正在想…', 'warn');
+}
+
+/* ── 关键的一步 ──
+   问题那一行刚从模型的流里出来就先上屏，不等「理由 / 依据」生成完。
+   省下的这一段，正是面试官最需要的时间：候选人还在说，他已经能读到题了。 */
+function showDraft(m){
+  if(!m.question || m.seq < nqSeq) return;
+  hideEmpty();
+  gotDraft = true;
+  nqSeq = m.seq;
+  $('nqQ').textContent = m.question;
+  $('nqQ').className = 'nq-q';
+  $('nqMeta').innerHTML =
+    '<span class="nq-cursor">▌</span> <span style="color:var(--dim2)">理由还在生成…</span>';
+  $('nextq').className = 'nextq ready';
+  setState('题已出，可以先看', 'live');
+  scroll();
+}
+
+/* 整轮推理结束：补齐类型 / 理由 / 依据，并把这条建议记进历史 */
+function showNext(m){
+  hideEmpty();
+  if(m.question && m.seq >= nqSeq){
+    gotDraft = true;
+    nqSeq = m.seq;
+    $('nqQ').textContent = m.question;
+    $('nqQ').className = 'nq-q';
+    $('nextq').className = 'nextq ready';
+    $('nqMeta').innerHTML =
+      `<div><span class="k">理由</span>${esc(m.reason || '—')}</div>` +
+      (m.basis ? `<div><span class="k">依据</span>${esc(m.basis)}</div>` : '');
+    $('nqMs').textContent = m.ms != null ? m.ms + 'ms' : '';
+    setState(TYPE_LABEL[m.kind] || '建议', m.kind === 'wrap' ? 'live' : '');
+  } else if(!m.question){
+    // 模型没给出可用的问题（格式崩了）：如实说，不要装作没事
+    setState('这一块没出题', 'warn');
+  }
+  if(m.question && !document.getElementById('qlog-' + m.seq)){
+    // 按 seq 去重：SSE 断开重连时服务端会把整段历史补发一遍，
+    // 不去重屏幕上就会出现两行一模一样的问题，面试官会以为 AI 问重复了。
+    const d = document.createElement('div');
+    d.className = 'qlog';
+    d.id = 'qlog-' + m.seq;
+    d.innerHTML =
+      `<span class="t">第${CN(m.seq)}块</span>` +
+      `<span class="badge ${m.kind || 'probe'}">${TYPE_LABEL[m.kind] || '建议'}</span>` +
+      `<span class="qq">${esc(m.question)}</span>` +
+      (m.replay ? '<span class="pill">历史</span>' : '');
+    $('feed').appendChild(d);
+    scroll();
+  }
+  // 立刻刷新统计，别让「已出题 N 次」在最长 2 秒里和上面的历史行数对不上——
+  // 面试官会盯着这个数判断 AI 跟不跟得上，它自相矛盾比慢一点更伤信任。
+  if(!m.replay) refreshState();
+}
+
+/* 面试官问出了新问题：上一条建议已经过期，面板回到等待态，
+   同时从他这一句开始的回答要另起一块。 */
+function resetPanel(){
+  nqSeq = -1;
+  gotDraft = false;
+  $('nqQ').textContent = '等他说完这一段，我会跟着他的话出下一道题。';
+  $('nqQ').className = 'nq-q wait';
+  $('nqMeta').innerHTML = '';
+  $('nqMs').textContent = '';
+  $('nextq').className = 'nextq';
+  setState('等下一块');
+  saidEl = null;
+}
+
+function addNotice(text, isErr){
+  const d = document.createElement('div');
+  d.style.cssText = 'text-align:center; font-size:12px; padding:4px; color:' +
+    (isErr ? 'var(--err)' : 'var(--dim2)');
+  d.textContent = text;
+  $('feed').appendChild(d);
+  scroll();
+}
+
+let flashEl = null;
+function flash(msg){
+  if(!flashEl){
+    flashEl = document.createElement('div');
+    flashEl.style.cssText =
+      'font-size:12px; color:var(--vague); text-align:center; padding:4px; transition:opacity .4s';
+    $('feed').appendChild(flashEl);
+  }
+  flashEl.textContent = msg;
+  clearTimeout(flashEl._t);
+  flashEl._t = setTimeout(() => { flashEl.style.opacity = '0'; }, 2500);
+}
+
+function scroll(){
+  const f = $('feed');
+  // 只有当用户已经在底部附近时才自动滚动，否则会打断往上翻的人
+  const near = f.scrollHeight - f.scrollTop - f.clientHeight < 120;
+  if(near) f.scrollTop = f.scrollHeight;
+}
+
+/* ── 状态刷新 ── */
+async function refreshState(){
+  try{
+    const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}`)).json();
+    const heard = s.stats.chunks || 0;
+    const made = (s.history || []).length;
+
+    $('stChunks').textContent = heard;
+    $('stApplied').textContent = made;
+    $('stMerged').textContent = s.stats.merged;
+    $('stMem').textContent = (s.answer || '').length;
+
+    /* AI 落后多少块：这是整个方案最该被盯着的一个数。
+       它一旦持续为正并且越来越大，说明模型跟不上这个人说话的语速，
+       面试官就会在候选人说完之后才开始等题——那就白做了。 */
+    const behind = heard - made;
+    $('progPill').textContent = `已出题 ${made} 次`;
+    $('progPill').className = 'pill' + (behind > 2 ? ' warn' : (heard && behind <= 0 ? ' live' : ''));
+    $('progPill').title = behind > 0
+      ? `AI 还有 ${behind} 块没出题（正在合并追进度）`
+      : (heard ? 'AI 跟得上，没有积压' : '还没开始');
+
+    const pctOf = arr => p => {
+      if(!arr || !arr.length) return '—';
+      const a = [...arr].sort((x,y)=>x-y);
+      return a[Math.min(a.length-1, Math.floor(a.length*p))] + 'ms';
+    };
+    $('stFirst').textContent = pctOf(s.stats.draftLatency)(.5);
+    $('stP50').textContent = pctOf(s.stats.latency)(.5);
+    $('stP90').textContent = pctOf(s.stats.latency)(.9);
+
+    $('modelPill').textContent = s.conf.model + ' @ ' + s.conf.baseUrl.replace(/^https?:\/\//,'');
+  }catch(_){}
+}
+
+/* ── 交互 ── */
+$('btnSaveMat').onclick = async () => {
+  const r = await fetch('/api/materials', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session:SESSION, materials:$('materials').value })
+  });
+  const j = await r.json();
+  $('matStat').textContent = j.chars + ' 字';
+  flash('材料已保存，之后的出题会以它为依据');
+};
+
+$('materials').addEventListener('input', e => {
+  $('matStat').textContent = e.target.value.length + ' 字';
+});
+
+$('btnAsk').onclick = askQuestion;
+$('question').addEventListener('keydown', e => { if(e.key === 'Enter') askQuestion(); });
+
+async function askQuestion(){
+  const q = $('question').value.trim();
+  if(!q) return;
+  await fetch('/api/question', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session:SESSION, question:q })
+  });
+  $('question').value = '';
+}
+
+$('btnReplay').onclick = async () => {
+  const text = $('replayText').value.trim();
+  if(!text) return flash('先贴一段回答');
+  $('btnReplay').disabled = true;
+  $('btnStop').disabled = false;
+  await fetch('/api/replay', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      session:SESSION, text, charsPer100ms: Number($('cps').value) || 4
+    })
+  });
+};
+
+$('btnStop').onclick = async () => {
+  await fetch(`/api/stop-replay?s=${encodeURIComponent(SESSION)}`, { method:'POST' });
+  $('btnReplay').disabled = false;
+  $('btnStop').disabled = true;
+};
+
+$('btnReset').onclick = async () => {
+  if(!confirm('清空这场面试的材料、回答和出题记录？')) return;
+  await fetch('/api/reset', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ session:SESSION })
+  });
+  $('feed').innerHTML = '<div class="empty" id="emptyHint">已重置。</div>';
+  flashEl = null;
+  resetPanel();
+  refreshState();
+};
+
+$('btnSummary').onclick = async () => {
+  const s = await (await fetch(`/api/summary?s=${encodeURIComponent(SESSION)}`)).json();
+  const blob = new Blob([JSON.stringify(s, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'interview-' + new Date().toISOString().slice(0,19).replace(/[:T]/g,'-') + '.json';
+  a.click();
+};
+
+$('btnSettings').onclick = () => {
+  const el = $('settings');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+};
+
+$('btnSaveCfg').onclick = async () => {
+  const r = await fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      session:SESSION,
+      baseUrl: $('cfgBase').value.trim(),
+      model: $('cfgModel').value.trim(),
+      apiKey: $('cfgKey').value
+    })
+  });
+  const j = await r.json();
+  $('cfgStat').textContent = '已应用';
+  flash('模型已切到 ' + j.model + ' @ ' + j.baseUrl);
+  refreshState();
+};
+
+/* ── 启动 ── */
+(async () => {
+  connect();
+  try{
+    const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}`)).json();
+    $('cfgBase').value = s.conf.baseUrl;
+    $('cfgModel').value = s.conf.model;
+    $('modelPill').textContent = s.conf.model + ' @ ' + s.conf.baseUrl.replace(/^https?:\/\//,'');
+    $('matStat').textContent = '0 字';
+  }catch(e){
+    $('connPill').textContent = '服务未启动';
+    $('connPill').className = 'pill warn';
+  }
+  refreshState();
+  setInterval(refreshState, 2000);
+})();
+</script>
+</body>
+</html>
