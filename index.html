@@ -345,6 +345,17 @@
     .qbar input{padding:8px; font-size:13px}
     .qbar button{padding:8px 10px; font-size:12.5px; flex:0 0 auto}
 
+    /* ── 触控目标 ──
+       实测（.run/probe_mobile_ui.mjs）改之前有四个在 34px 以下：btnMore 34、
+       question 35、btnAsk 34、btnRole 19。19px 的那个基本按不准。
+       规则：主操作（麦克风、发送、更多、折叠把手）≥44px，
+       其余可点的东西一律 ≥32px。手指不是鼠标，这个不能省。 */
+    #btnMore{width:44px; height:44px; font-size:18px}
+    .qbar input{padding:12px 10px; font-size:14px}   /* 35 → 44 */
+    .qbar button{padding:12px 14px; font-size:13.5px} /* 34 → 44 */
+    #micSec h2 button.mini{min-height:40px; padding:9px 12px; font-size:12.5px}
+    #btnRole, #btnReplayOpen{float:none; margin-top:0}
+
     /* ── 对话流：能滚，但至少留两行 ── */
     .feed{padding:10px; gap:8px; min-height:0}
     .saidblock{font-size:13px; line-height:1.65}
@@ -378,6 +389,11 @@
        所以单独放行，并且挪到最前面。 */
     .side > #micSec{display:flex; order:-1; padding:10px}
     .side h2{font-size:11px; margin-bottom:6px}
+    /* 手机 h2 里塞了两个按钮（切换 / 模拟回放），标题会被挤成一竖条。
+       让它换行，按钮各占一半宽度——比 19px 高的小药丸好按得多。 */
+    .side h2{display:flex; align-items:center; flex-wrap:wrap; gap:5px}
+    .side h2 .mini{flex:0 0 auto}
+    #micWho{flex:0 0 auto}
     .micbtn{
       /* 拇指区：实测原样 47px 高，但被侧栏的 42vh 上限顶出了屏幕 */
       padding:15px 12px; font-size:15px; border-radius:10px; font-weight:600;
