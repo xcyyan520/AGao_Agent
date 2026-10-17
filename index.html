@@ -112,6 +112,9 @@
   .hist-item .meta{font-size:11px; color:var(--dim2); display:flex; gap:10px; flex-wrap:wrap}
   .hist-item .qs{margin-top:5px; font-size:12px; color:var(--dim); line-height:1.5}
   .hist-item .qs div{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .hist-item .acts{margin-top:6px; display:flex; gap:6px}
+  .notice{text-align:center; font-size:12px; color:var(--dim2); padding:6px 4px}
+  .saidblock .why{font-size:11.5px; color:var(--dim2); margin-top:4px}
 
   main{flex:1; display:flex; min-height:0}
 
@@ -213,6 +216,14 @@
     background:rgba(255,255,255,.05); border-radius:3px; vertical-align:1px;
   }
   .saidblock.q .who{color:#c9a25a; background:rgba(255,180,80,.1)}
+  /* AI 建议的题：和「面试官说的话」必须视觉可分。
+     它们长得像（都是一句问话），但性质完全不同——一个是真问出口的，
+     一个是备选。混在一起看历史，就分不清哪句真的发生了。 */
+  .saidblock.sugg{
+    color:var(--dim); border-left-color:#2f4a6a; background:rgba(120,180,255,.04);
+    border-radius:0 4px 4px 0; padding-right:8px;
+  }
+  .saidblock.sugg .who{color:var(--accent); background:rgba(120,180,255,.12)}
   @keyframes in{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 
   /* 出题历史：一行一条，事后能回看 AI 到底建议过什么 */
@@ -931,10 +942,20 @@ async function loadHist(){
         `<span class="when">${esc(when)}</span></div>` +
         `<div class="meta"><span>${s.suggestions || 0} 道题</span>` +
         `<span>${s.turns || 0} 次提问</span>` +
+        `<span>${s.lines || 0} 句对话</span>` +
         (s.material_name ? `<span>材料：${esc(s.material_name)}</span>` : '') +
-        `</div><div class="qs">点一下展开这一场出过的题</div>`;
+        `</div><div class="qs">点一下展开这一场出过的题</div>` +
+        `<div class="acts"><button class="mini" data-act="load">加载这场</button></div>`;
       // 展开才拉题目列表：30 场一次性全拉会把接口拖慢
-      d.onclick = async () => {
+      d.onclick = async (ev) => {
+        /* 「加载这场」和「展开题目」是两件事，别让点击冒泡上去把面板收掉。
+           加载 = 把这一场的对话流 + 出过的题完整还原到左边的对话面板，
+           效果就是「回到那场面试结束时的样子」。 */
+        if(ev.target.dataset.act === 'load'){
+          ev.stopPropagation();
+          await loadSessionIntoView(s.id, ev.target);
+          return;
+        }
         const qs = d.querySelector('.qs');
         if(d.dataset.open === '1'){
           qs.innerHTML = '点一下展开这一场出过的题';
@@ -956,6 +977,91 @@ async function loadHist(){
     $('histStat').textContent = `共 ${items.length} 场 · ${totalQ} 道题`;
   }catch(e){
     list.innerHTML = '<div class="lib-empty">读不出来，服务可能没起。</div>';
+  }
+}
+
+/* ── 把一场历史面试还原到左边面板 ──
+   要还原三样东西：两个人说的话、AI 出过的题、面试官真问过的题。
+   为什么不在服务端「切到那一场」——因为那是破坏性的：切过去之后
+   这一场就变成了活跃会话，紧接着录的音会混进去。这里只做只读还原，
+   当前场次一个字都不动。 */
+async function loadSessionIntoView(id, btn){
+  const old = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '加载中…'; }
+  try{
+    const g = await (await fetch('/api/sessions/get?id=' + encodeURIComponent(id))).json();
+    if(!g.ok) throw new Error('读不出来');
+
+    const feed = $('feed');
+    feed.innerHTML = '';
+    saidEl = null;
+    saidBlockEl.interviewer = null;
+    flashEl = null;   // 它刚才挂在旧的 feed 上，已经被 innerHTML 清掉了
+
+    const lines = g.lines || [];
+    const head = document.createElement('div');
+    head.className = 'empty';
+    head.textContent = `以下是「${g.session?.title || g.session?.id || id}」的记录，` +
+      `${lines.length} 句对话 · ${(g.suggestions || []).length} 道建议 · ${(g.turns || []).length} 次提问。只读。`;
+    feed.appendChild(head);
+
+    // 对话流：面试官的按「一问」起块，候选人的按「一段」累积
+    for(const l of lines){
+      if(l.role === 'interviewer'){
+        const el = document.createElement('div');
+        el.className = 'saidblock q';
+        const who = document.createElement('span');
+        who.className = 'who';
+        who.textContent = '面试官';
+        el.appendChild(who);
+        el.appendChild(document.createTextNode(l.text));
+        feed.appendChild(el);
+        if(saidEl) saidEl.dataset.closed = '1';
+      }else{
+        if(!saidEl || saidEl.dataset.closed === '1'){
+          saidEl = document.createElement('div');
+          saidEl.className = 'saidblock';
+          feed.appendChild(saidEl);
+        }
+        saidEl.textContent += l.text;
+      }
+    }
+    saidEl = null;
+
+    // AI 出过的题，按顺序铺开
+    const sugg = (g.suggestions || []).filter(r => r.question);
+    if(sugg.length){
+      const d = document.createElement('div');
+      d.className = 'notice';
+      d.textContent = `— 这场 AI 一共出过 ${sugg.length} 道题 —`;      feed.appendChild(d);
+      for(const r of sugg){
+        const el = document.createElement('div');
+        /* 建议用独立类，不要复用 .q（面试官）。
+           第一版就是复用的，结果「还原出的对话里有面试官」这项检查
+           被建议块蒙过去了——明明那场没有提问，检查却是绿的。 */
+        el.className = 'saidblock sugg';
+        const who = document.createElement('span');
+        who.className = 'who';
+        who.textContent = `建议 · ${r.kind || ''} ${r.ms ? r.ms + 'ms' : ''}`.trim();
+        el.appendChild(who);
+        el.appendChild(document.createTextNode(r.question));
+        if(r.reason){
+          const rz = document.createElement('div');
+          rz.className = 'why';
+          rz.textContent = '理由：' + r.reason;
+          el.appendChild(rz);
+        }
+        feed.appendChild(el);
+      }
+    }
+
+    $('histWrap').style.display = 'none';
+    scroll();
+    flash(`已加载「${g.session?.title || id}」，${lines.length} 句对话。这是只读回放，不会影响当前这场。`);
+  }catch(e){
+    flash('加载失败：' + e.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = old || '加载这场'; }
   }
 }
 

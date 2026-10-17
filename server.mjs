@@ -139,6 +139,15 @@ function newSession(id, conf = {}) {
       const prior = store.getAskedFromOtherSessions(id);
       if (prior.length) s.judge.setPriorAsked(prior);
       s.materialId = data?.session?.material_id ?? null;
+      /* 对话流也恢复回来。没有这一步的话，服务重启（或者页面刷新后
+         触发重建）之后对话面板一片空白，而库里明明存着两个人刚才说的话。
+         只取最后 200 条，和内存里的上限一致。 */
+      if (data?.lines?.length) {
+        s.transcript = data.lines.slice(-200).map(l => ({
+          role: l.role === 'interviewer' ? 'interviewer' : 'candidate',
+          text: l.text, at: l.at, final: true,
+        }));
+      }
       // 库里没有这一场就建一行，否则后面 addTurn/addSuggestion 的
       // 外键（ON DELETE CASCADE）会失败，静默丢记录。
       if (!data) dbWrite(st => st.ensureSession(id), 'ensureSession');
@@ -153,6 +162,12 @@ function newSession(id, conf = {}) {
 
   s.chunker.on('chunk', c => {
     send(s, 'chunk', { seq: null, text: c.text, reason: c.reason, at: c.at });
+    /* ★ 候选人说的话在这里统一落库。
+       真麦克风和模拟回放两条输入路径都会汇到 chunker.push，所以这里是
+       【唯一】该写的地方。写在 onAsrFinal 里的话，接麦克风时同一句话会
+       在历史里出现两遍（一遍是 ASR 定稿的整句，一遍是切块器重切出的块）。
+       role 一律记 candidate：切块器的输入按定义就是候选人在说话。 */
+    dbWrite(st => st.addLine(s.id, { role: 'candidate', text: c.text, at: c.at }), 'addLine');
     s.judge.submit(c.text, { reason: c.reason });
   });
 
@@ -275,19 +290,35 @@ function asrKey() {
   return k;
 }
 
+/** 往对话流里加一行，并且推给所有设备。
+ *  persist 决定要不要落库——候选人那一路是切块器写库的（见 chunk 事件），
+ *  从这里再写一遍就会重复，所以它传 false。 */
+function addTranscriptLine(s, role, text, { persist = true } = {}) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const line = { role, text: t, at: Date.now(), final: true };
+  s.transcript.push(line);
+  // 只留最近 200 条：面板最多显示这么多，再多只是占内存
+  if (s.transcript.length > 200) s.transcript.splice(0, s.transcript.length - 200);
+  if (persist) dbWrite(st => st.addLine(s.id, line), 'addLine');
+  send(s, 'asr_line', line);
+  return line;
+}
+
 /** 一句话定稿后要做的事，按角色分岔。
  *  这是整个语音方案的分水岭：同样一句识别结果，
  *  面试官说的要去当「问题」，候选人说的要去当「回答」。 */
 function onAsrFinal(s, role, text) {
-  const line = { role, text, at: Date.now(), final: true };
-  s.transcript.push(line);
-  // 只留最近 200 条：面板最多显示这么多，再多只是占内存
-  if (s.transcript.length > 200) s.transcript.splice(0, s.transcript.length - 200);
-  send(s, 'asr_line', line);
-
   if (role === 'candidate') {
     /* 候选人的话 = 回答。走和「模拟回放」完全一样的切块入口，
-       这样接真麦克风之后，切块策略、背压合并、出题链路全都不用改。 */
+       这样接真麦克风之后，切块策略、背压合并、出题链路全都不用改。
+
+       ★ 候选人的这一句【不在这里落库】。两条输入路径（真麦克风、模拟
+         回放）到这里会汇合成 chunker.push，统一在 chunk 事件里落库。
+         如果在两处都写，接麦克风时同一句话会在历史里出现两遍——
+         一遍是 ASR 定稿的整句，一遍是切块器重新切的块。
+         但它【要】进对话流：面板上得实时看见他在说什么。 */
+    addTranscriptLine(s, 'candidate', text, { persist: false });
     s.chunker.push(text);
     return;
   }
@@ -296,6 +327,7 @@ function onAsrFinal(s, role, text) {
      不逐句当问题：他可能先「嗯，好」再说正事，逐句发会把「嗯」也
      当成一个问题记进历史，污染跨场记忆。
      先攒起来，停顿 800ms 再一起发——他真要问的时候会连着说完一句。 */
+  addTranscriptLine(s, 'interviewer', text, { persist: true });
   s.qBuf = (s.qBuf ? s.qBuf + text : text).trim();
   clearTimeout(s.qTimer);
   s.qTimer = setTimeout(() => {
@@ -610,7 +642,14 @@ const server = http.createServer(async (req, res) => {
       s.chunker.flushNow('beforeQuestion');
       // 先把它当成【上一题的结束】：候选人刚才那段话是对上一个问题的回答。
       // 必须在 newQuestion 之前写，因为 newQuestion 会把 answer 清掉。
-      if (q.trim()) dbWrite(st => st.addTurn(s.id, q, s.judge.answer || null), 'addTurn');
+      if (q.trim()) {
+        dbWrite(st => st.addTurn(s.id, q, s.judge.answer || null), 'addTurn');
+        /* 面试官的话也要进对话流，否则「历史面试」加载出来只剩候选人在
+           自言自语，看不出他是在回答什么。语音识别那条路已经在
+           onAsrFinal 里写了，此处是手打/回车那条路，两条必须等价——
+           实测漏了这句，加载历史时面试官的提问一条都不显示。 */
+        addTranscriptLine(s, 'interviewer', q, { persist: true });
+      }
       await s.judge.newQuestion(q);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify({ ok: true }));

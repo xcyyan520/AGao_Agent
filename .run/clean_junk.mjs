@@ -1,10 +1,13 @@
 /* 清掉自动化测试在库里留下的场次与材料。
    判据：id 以这些前缀开头 —— uimic_（麦克风检查）、asr（ASR 探针）、
-   ui_（界面检查）、tunnel_（隧道检查）、corpus_（真实语料压测）。
-   这些都是脚本造的，不是人真面过的。 */
+   ui_（界面检查）、tunnel_（隧道检查）、corpus_（真实语料压测）、
+   probe_（各探针脚本）。
+   这些都是脚本造的，不是人真面过的。
+   注意前缀要**带下划线**，写 'test_' 会连 'test_...' 的自动场次一起清掉，
+   但写 'test'（不带下划线）就会误伤任何以 test 开头的东西——宁可窄不要宽。 */
 import { openStore } from '../store.mjs';
 
-const PREFIXES = ['uimic_', 'asr_', 'asr', 'ui_', 'uib_', 'tunnel_', 'corpus_', 'p_', 'test_'];
+const PREFIXES = ['uimic_', 'asr_', 'asr', 'ui_', 'uib_', 'tunnel_', 'corpus_', 'p_', 'test_', 'probe_'];
 
 const st = openStore();
 const sessions = st.listSessions(1000);

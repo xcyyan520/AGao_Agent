@@ -92,6 +92,11 @@ export function openStore(dbPath = DB_PATH) {
      suggestions  AI 出过的题（含理由/类型/依据/耗时），复盘用。
      turns        面试官真正问出口的问题 + 候选人的回答。这才是「历史
                   消息」，也是跨场记忆的依据。
+     lines        对话流原文：谁说的、说了什么、什么时候。语音识别定稿的
+                  每一句、以及模拟回放切出来的每一块，都落在这里。
+                  ★ 这张表是后来补的。以前 transcript 只在内存里，于是
+                  「历史面试」点开只有一串题目，看不到两个人到底说了什么——
+                  复盘时最重要的恰恰是那些话。重启一次就全没了。
      ──────────────────────────────────────────────────────────────── */
   db.exec(`
     CREATE TABLE IF NOT EXISTS materials (
@@ -134,7 +139,17 @@ export function openStore(dbPath = DB_PATH) {
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS lines (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT    NOT NULL,
+      role       TEXT    NOT NULL,
+      text       TEXT    NOT NULL,
+      at         INTEGER NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sugg_session ON suggestions(session_id, id);
+    CREATE INDEX IF NOT EXISTS idx_lines_session ON lines(session_id, id);
     CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, id);
     CREATE INDEX IF NOT EXISTS idx_sessions_time ON sessions(updated_at DESC);
   `);
@@ -207,6 +222,7 @@ export function openStore(dbPath = DB_PATH) {
         SELECT s.id, s.title, s.started_at, s.updated_at, s.material_id,
                (SELECT COUNT(*) FROM suggestions g WHERE g.session_id = s.id) AS suggestions,
                (SELECT COUNT(*) FROM turns t WHERE t.session_id = s.id)       AS turns,
+               (SELECT COUNT(*) FROM lines l WHERE l.session_id = s.id)       AS lines,
                m.name AS material_name
         FROM sessions s
         LEFT JOIN materials m ON m.id = s.material_id
@@ -225,7 +241,30 @@ export function openStore(dbPath = DB_PATH) {
       if (!row) return null;
       const turns = db.prepare('SELECT * FROM turns WHERE session_id = ? ORDER BY id').all(sid);
       const suggestions = db.prepare('SELECT * FROM suggestions WHERE session_id = ? ORDER BY id').all(sid);
-      return { session: row, turns, suggestions };
+      const lines = db.prepare('SELECT * FROM lines WHERE session_id = ? ORDER BY id').all(sid);
+      return { session: row, turns, suggestions, lines };
+    },
+
+    /* ══ 对话流原文 ═══════════════════════════════════════════════════
+       语音识别定稿的每一句、模拟回放切出来的每一块，都往这里写一行。
+       没有这张表的时候，「历史面试」点开只有一串题目——说得难听点，
+       那只能看出 AI 想了什么，看不出这场面试实际发生了什么。
+       ──────────────────────────────────────────────────────────────── */
+    addLine(sessionId, line) {
+      const sid = String(sessionId);
+      api.ensureSession(sid);
+      const t = String(line?.text || '').trim();
+      if (!t) return null;
+      const role = line.role === 'interviewer' ? 'interviewer' : 'candidate';
+      const r = db.prepare('INSERT INTO lines (session_id, role, text, at) VALUES (?,?,?,?)')
+        .run(sid, role, t, Number(line.at) || now());
+      api.touchSession(sid);
+      return Number(r.lastInsertRowid);
+    },
+
+    getLines(sessionId, limit = 2000) {
+      return db.prepare('SELECT * FROM lines WHERE session_id = ? ORDER BY id LIMIT ?')
+        .all(String(sessionId), Number(limit) || 2000);
     },
 
     deleteSession(id) {

@@ -500,6 +500,46 @@ const expanded = await evalJs(`(() => {
 check('展开一场能看到题目列表', !expanded.none && !expanded.loading && expanded.lines > 0,
   expanded.none ? '没有场次' : (expanded.loading ? '还是载入中' : `${expanded.lines} 行`));
 
+/* ── 「加载这场」：把整场面试还原到左边面板 ──
+   这是用户提的「点击历史就加载历史」。要检查的不是按钮在不在，
+   而是点下去对话面板里**真的出现了两个人的话**——包括语音识别出来的
+   面试官提问和候选人回答。只加载题目不加载对话，等于没加载。 */
+/* 判据不能用「变长了」。加载是把面板整个换成那一场的内容，
+   比原来短是完全正常的（原来那场说得更多）。要判的是
+   「面板里确实出现了那一场的内容」。 */
+const beforeFeed = await evalJs(`document.getElementById('feed').innerText.length`);
+await evalJs(`(() => {
+  /* 挑一场**有提问记录**的场次点。
+     原来直接点第一个，而列表按 updated_at 排，第一个往往刚好是刚才麦克风
+     那段——那场只有建议、没有面试官提问，于是「对话里有面试官」必然挂。
+     这不是产品 bug，是选错了样本。 */
+  const items = [...document.querySelectorAll('#histWrap .hist-item')];
+  const pick = items.find(it => /[1-9]\\d*\\s*次提问/.test(it.querySelector('.meta').textContent)) || items[0];
+  const b = pick && pick.querySelector('button[data-act="load"]');
+  if (b) b.click();
+})()`);
+await sleep(1600);
+const loaded = await evalJs(`(() => {
+  const f = document.getElementById('feed');
+  const t = f.innerText;
+  return {
+    len: t.length,
+    closed: document.getElementById('histWrap').style.display === 'none',
+    hasWho: t.includes('面试官'),
+    hasCand: f.querySelectorAll('.saidblock:not(.q):not(.sugg)').length,
+    hasInterv: f.querySelectorAll('.saidblock.q').length,
+    saysReadonly: /只读/.test(t),
+    saysCount: /句对话/.test(t)
+  };
+})()`);
+check('点「加载这场」能把历史还原到面板', loaded.len > 0 && loaded.saysReadonly, `${beforeFeed} → ${loaded.len} 字`);
+check('还原后自动关掉弹层', loaded.closed);
+check('还原出的对话里有面试官说的话', loaded.hasInterv > 0, `${loaded.hasInterv} 块`);
+check('还原出的对话里有候选人的话', loaded.hasCand > 0, `${loaded.hasCand} 块`);
+check('还原的是对话流不是光秃秃的题目', loaded.hasWho && loaded.hasCand && loaded.hasInterv);
+check('明确标了这是只读回放', loaded.saysReadonly);
+check('标了这场有多少句对话', loaded.saysCount);
+
 // 关掉弹层，别把后面的布局检查搅了
 await evalJs('document.getElementById("btnHistClose").click()');
 await sleep(300);
