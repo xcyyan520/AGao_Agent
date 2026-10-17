@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const APP = 'http://127.0.0.1:8900';
 const PORT = 9333;
@@ -110,8 +111,20 @@ check('没有 console.error', consoleErrs.length === 0, consoleErrs[0] || '');
 
 const hasText = (s) => evalJs(`document.body.innerText.includes(${JSON.stringify(s)})`);
 check('有材料输入框 #materials', await evalJs('!!document.getElementById("materials")'));
+check('有麦克风按钮 #btnMic', await evalJs('!!document.getElementById("btnMic")'));
+check('有角色切换 #btnRole', await evalJs('!!document.getElementById("btnRole")'));
+check('麦克风是主路径（默认可见）', await evalJs(
+  'document.getElementById("micSec").style.display !== "none"'));
+check('回放默认收起（不占地方）', await evalJs(
+  'document.getElementById("replaySec").style.display === "none"'));
+check('有「模拟回放」入口', await evalJs('!!document.getElementById("btnReplayOpen")'));
+
+// 后面要测回放，先把那一段展开
+await evalJs('document.getElementById("btnReplayOpen").click()');
+await sleep(300);
+check('点「模拟回放」能展开', await evalJs(
+  'document.getElementById("replaySec").style.display !== "none"'));
 check('有回放文本框 #replayText', await evalJs('!!document.getElementById("replayText")'));
-check('有「保存材料」按钮', await evalJs('!!document.getElementById("btnSaveMat")'));
 check('有「开始回放」按钮', await evalJs('!!document.getElementById("btnReplay")'));
 
 console.log('\n═══ 保存材料 ═══');
@@ -251,6 +264,173 @@ for (const [label, w, h] of [['桌面 1440', 1440, 900], ['手机 390', 390, 844
     L.unreachable.slice(0, 2).join('; ') || `${L.nButtons} 个按钮可达`);
 }
 await send('Emulation.clearDeviceMetricsOverride', {}, sessionId);
+
+/* ══ 麦克风：真浏览器 + 假麦克风设备 ══════════════════════════════════
+   这一段是整个「接语音」改动里最容易自欺的地方：
+   服务端的 ASR 链路可以用 WAV 文件单独验证（.run/probe_asr_e2e.mjs），
+   但那验证不了浏览器侧——AudioContext 能不能起来、降采样对不对、
+   PCM 有没有真的发出去、按钮状态跟不跟得上。
+
+   Chrome 的 --use-file-for-fake-audio-capture 能把一个 WAV 当成麦克风
+   输入，于是整条「浏览器采集 → 转码 → 上传 → 识别 → 出题」可以真跑。
+   这个开关只在带这个参数启动的浏览器里有效，所以本脚本单独用一个
+   Chrome 进程跑这一段。                                              */
+console.log('\n═══ 麦克风（假麦克风设备喂一段语音）═══');
+
+const MIC_WAV = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tts_test.wav');
+if (!fs.existsSync(MIC_WAV)) {
+  check('找得到测试语音 tts_test.wav', false, '先生成：见文档「语音」一节的 ffmpeg / SAPI 命令');
+} else {
+  const PORT2 = 9334;
+  const profile2 = fs.mkdtempSync(path.join(os.tmpdir(), 'uimic-'));
+  const chrome2 = spawn(CHROME, [
+    '--headless=new', `--remote-debugging-port=${PORT2}`,
+    `--user-data-dir=${profile2}`, '--no-first-run', '--no-default-browser-check',
+    '--disable-gpu', '--window-size=1440,900',
+    // 假麦克风：把 WAV 当输入。不 loop，放完就静音。
+    '--use-fake-ui-for-media-stream',
+    '--use-fake-device-for-media-stream',
+    `--use-file-for-fake-audio-capture=${MIC_WAV}%noloop`,
+    // 无头 Chrome 默认拒绝麦克风权限，要显式放行这一个源
+    '--unsafely-treat-insecure-origin-as-secure=http://127.0.0.1:8900',
+    'about:blank',
+  ], { stdio: 'ignore' });
+
+  let wsUrl2 = null;
+  for (let i = 0; i < 60; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT2}/json/version`);
+      wsUrl2 = (await r.json()).webSocketDebuggerUrl;
+      if (wsUrl2) break;
+    } catch { /* 还没起来 */ }
+    await sleep(250);
+  }
+
+  if (!wsUrl2) {
+    check('第二个 Chrome（假麦克风）能起来', false);
+    chrome2.kill();
+  } else {
+    const ws2 = new WebSocket(wsUrl2);
+    await new Promise((res, rej) => { ws2.onopen = res; ws2.onerror = rej; });
+    let id2 = 0;
+    const pending2 = new Map();
+    const jsErr2 = [];
+    ws2.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.id && pending2.has(m.id)) { pending2.get(m.id)(m); pending2.delete(m.id); }
+      else if (m.method === 'Runtime.exceptionThrown') {
+        const d = m.params.exceptionDetails;
+        jsErr2.push(d.exception?.description || d.text);
+      }
+    };
+    const send2 = (method, params = {}, sid) => new Promise((res) => {
+      const myId = ++id2;
+      pending2.set(myId, res);
+      ws2.send(JSON.stringify({ id: myId, method, params, ...(sid ? { sessionId: sid } : {}) }));
+    });
+    const { result: { targetId: t2 } } = await send2('Target.createTarget', { url: 'about:blank' });
+    const { result: { sessionId: s2 } } = await send2('Target.attachToTarget', { targetId: t2, flatten: true });
+    await send2('Runtime.enable', {}, s2);
+    await send2('Page.enable', {}, s2);
+    // 麦克风权限：不给的话 getUserMedia 直接抛 NotAllowedError
+    await send2('Browser.grantPermissions', {
+      origin: APP,
+      permissions: ['audioCapture'],
+    });
+    const eval2 = async (expr) => {
+      const r = await send2('Runtime.evaluate',
+        { expression: expr, awaitPromise: true, returnByValue: true }, s2);
+      if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || 'eval 失败');
+      return r.result?.result?.value;
+    };
+
+    const MIC_SESSION = 'uimic_' + Date.now();
+    await send2('Page.navigate', { url: `${APP}/?s=${MIC_SESSION}` }, s2);
+    await sleep(1500);
+
+    // 这一场也要有材料，否则出题没有依据（但出不出题不是这段的重点）
+    await eval2(`(async () => {
+      await fetch('/api/materials', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session: ${JSON.stringify(MIC_SESSION)}, materials: '候选人：我用 LangGraph 把 Agent 建模成状态机。' }) });
+      return true;
+    })()`);
+
+    check('麦克风区域默认可见', await eval2(
+      'document.getElementById("micSec").style.display !== "none"'));
+
+    // 点「开始说话」
+    const started = await eval2(`(async () => {
+      document.getElementById('btnMic').click();
+      // 采集链路是异步的（要 getUserMedia + 起 AudioContext），等它落定
+      for (let i = 0; i < 40; i++) {
+        await new Promise(r => setTimeout(r, 250));
+        if (document.getElementById('btnMic').textContent.includes('正在说话')) break;
+      }
+      return {
+        label: document.getElementById('btnMic').textContent,
+        cls: document.getElementById('btnMic').className
+      };
+    })()`);
+    check('点「开始说话」后按钮变成正在说话', /正在说话/.test(started.label), started.label);
+    check('按钮有记录中的样式', /on/.test(started.cls), started.cls);
+
+    // 服务端那一路要真的开起来
+    await sleep(1200);
+    const live = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+    check('服务端那一路识别已开', live.asr && live.asr.candidate === 'listening', JSON.stringify(live.asr));
+
+    // 等 WAV 放完、识别出字
+    let micText = '';
+    for (let i = 0; i < 40; i++) {
+      await sleep(500);
+      const s = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+      const got = (s.transcript || []).filter(l => l.role === 'candidate').map(l => l.text).join('');
+      if (got.length >= 6) { micText = got; break; }
+    }
+    check('浏览器采到的声音被识别成了文字', micText.length > 0,
+      micText ? `「${micText.slice(0, 40)}」` : '一句都没识别出来');
+    check('识别出来的内容像是那段话', /LangGraph|状态机|语言|模型/i.test(micText), micText.slice(0, 40));
+
+    // 点「停止」
+    const stopped = await eval2(`(async () => {
+      document.getElementById('btnMic').click();
+      await new Promise(r => setTimeout(r, 1200));
+      return { label: document.getElementById('btnMic').textContent };
+    })()`);
+    check('再点一下能停下来', /开始说话/.test(stopped.label), stopped.label);
+
+    await sleep(900);
+    const after = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+    check('停下来之后服务端那一路也关了', after.asr && after.asr.candidate === 'off',
+      JSON.stringify(after.asr));
+
+    // 角色切换
+    const roleNow = await eval2(`(() => {
+      document.getElementById('btnRole').click();
+      return { who: document.getElementById('micWho').textContent,
+               ls: localStorage.getItem('micRole') };
+    })()`);
+    check('能切成面试官', /面试官/.test(roleNow.who), roleNow.who);
+    check('角色记在本地（刷新不丢）', roleNow.ls === 'interviewer', String(roleNow.ls));
+
+    check('麦克风这段没有 JS 异常', jsErr2.length === 0, jsErr2[0] || '');
+
+    // 清掉这一场，别在库里留垃圾。
+    // 光删内存会话不够 —— 材料库和「历史面试」读的是 SQLite，
+    // 得再走一遍 /api/sessions/delete 才真把这行删掉。
+    await fetch(`${APP}/api/reset?s=${MIC_SESSION}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: MIC_SESSION }),
+    }).catch(() => {});
+    await fetch(`${APP}/api/sessions/delete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: MIC_SESSION }),
+    }).catch(() => {});
+
+    ws2.close();
+    chrome2.kill();
+  }
+}
 
 /* ══ 持久化界面：材料库 + 历史面试 ══════════════════════════════════════
    这两块是新加的，之前没有任何检查盯着。

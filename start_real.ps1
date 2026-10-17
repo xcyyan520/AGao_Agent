@@ -2,7 +2,7 @@
 #
 # 用法（在 07-同步思考 目录下）：
 #   .\start_real.ps1
-# 然后浏览器打开 http://127.0.0.1:8900 ，点「开始回放」。
+# 然后浏览器打开 http://127.0.0.1:8900，点「开始说话」。
 #
 # 不需要 fake_stream.mjs —— 那个假接口也不用启动。
 #
@@ -16,7 +16,8 @@
 # 2. LLM_BASE 是 .../compatible-mode，【不带 /v1】。
 #    engine.mjs 自己会拼 `/v1/chat/completions`，多写一个 /v1 会拼成
 #    /v1/v1/... 返回 404。三个写法里只有不带 /v1 的那个通。
-#    （拼接那行现在在 engine.mjs:533，改了 engine.mjs 后行号会漂。）
+#    （拼接那行现在在 engine.mjs 的 `_infer()` 里，搜 `v1/chat/completions`
+#      就能找到；改了 engine.mjs 之后行号会漂，别按行号找。）
 
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
@@ -36,6 +37,10 @@ if (-not $key) {
 $env:LLM_BASE  = 'https://dashscope.aliyuncs.com/compatible-mode'
 $env:LLM_MODEL = 'deepseek-v4.1-flash'
 $env:LLM_KEY   = $key
+# 语音识别和出题都在百炼，用同一把 Key。这里显式写上，是为了让人一眼看出
+# 「录音这条链路要花钱」，而不是以为它是本地免费的。
+# 价格 0.00033 元/秒 ≈ 1.19 元/小时（fun-asr-realtime）。
+$env:ASR_KEY   = $key
 $env:PORT      = if ($env:PORT) { $env:PORT } else { '8900' }
 
 # 端口占用时先报清楚，别让 node 抛一堆 EADDRINUSE 栈

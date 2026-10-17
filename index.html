@@ -201,6 +201,18 @@
     border-left:2px solid #2a3f5a; padding:4px 0 4px 10px;
     white-space:pre-wrap; word-break:break-word; animation:in .18s ease-out;
   }
+  /* 面试官说的话：换个颜色和左边线。
+     两个人的话在同一个流里，光靠内容分不出哪句是问的。 */
+  .saidblock.q{
+    color:var(--fg); border-left-color:#5a4a2a; background:rgba(255,180,80,.04);
+    border-radius:0 4px 4px 0; padding-right:8px;
+  }
+  .saidblock .who{
+    display:inline-block; font-size:10.5px; font-weight:600; letter-spacing:.4px;
+    color:var(--dim2); margin-right:8px; padding:1px 5px;
+    background:rgba(255,255,255,.05); border-radius:3px; vertical-align:1px;
+  }
+  .saidblock.q .who{color:#c9a25a; background:rgba(255,180,80,.1)}
   @keyframes in{from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:none}}
 
   /* 出题历史：一行一条，事后能回看 AI 到底建议过什么 */
@@ -253,6 +265,29 @@
     .nextq{margin:8px 10px 0; padding:9px 11px}
     .qbar{padding:7px 10px}
   }
+
+  /* ── 麦克风 ──
+     整块区域就一个按钮，所以按钮要够大：手机上是拇指点的，
+     面试进行中不该出现「点偏了没点上，以为坏了」这种事。 */
+  .micbtn{
+    width:100%; padding:13px 12px; font-size:14px; font-weight:600;
+    border-radius:8px; margin-top:2px;
+  }
+  .micbtn.on{
+    background:#3a1414; border-color:#5e2020; color:#ff8f8f;
+    animation:micpulse 1.6s ease-in-out infinite;
+  }
+  @keyframes micpulse{50%{box-shadow:0 0 0 4px rgba(255,90,90,.13)}}
+  /* 正在说的话：等宽行高，字进来时不会把下面的东西顶得跳。
+     中间结果一秒变好几次，跳一下人就分不清哪句是新的。 */
+  .micshow{
+    font-size:13px; line-height:1.6; color:var(--dim); margin-top:8px;
+    min-height:20px; max-height:76px; overflow:hidden;
+    word-break:break-word; white-space:pre-wrap;
+  }
+  .micshow:empty{display:none}
+  .hint{font-size:11.5px; color:var(--dim2); line-height:1.65; margin-top:8px}
+  .hint b{color:var(--dim); font-weight:600}
 </style>
 </head>
 <body>
@@ -314,8 +349,30 @@
       </div>
     </section>
 
-    <section>
-      <h2>模拟候选人说话</h2>
+    <!-- ── 说话（麦克风） ──
+         这一块是主路径：点一下开始，再点一下暂停。
+         回放收在下面（点「模拟回放」展开），因为要复现问题、要演示、
+         要在没法开麦的地方试功能，都得靠它。
+         不做长按：面试里手要用来记笔记，长按是反人类的。 -->
+    <section id="micSec">
+      <h2>说话
+        <span class="pill" id="micWho">我是面试者</span>
+        <button id="btnRole" class="mini" title="切换这台设备代表谁：候选人 / 面试官。两个人各开一台，各点各的。">切换</button>
+        <button id="btnReplayOpen" class="mini" title="没有麦克风时用这个：把文字按真人语速喂进去">模拟回放</button>
+      </h2>
+      <button id="btnMic" class="micbtn">开始说话</button>
+      <div class="micshow" id="micShow"></div>
+      <div class="hint" id="micHint">
+        <b>两个人各开一台设备</b>，各自点「切换」选好自己是谁，再点「开始说话」。<br>
+        面试官说的话进右边「你实际问出口的问题」，候选人说的话喂给 AI 出题。<br>
+        第一次点会要麦克风权限，允许一下。
+      </div>
+    </section>
+
+    <section id="replaySec" style="display:none">
+      <h2>模拟回放
+        <button id="btnReplayClose" class="mini">收起</button>
+      </h2>
       <textarea id="replayText" style="height:88px"
         placeholder="粘一段真实面试回答。点『开始回放』后，它会按真人语速（约 4 字/100ms）逐字喂进去，模拟边说边出题。"></textarea>
       <div class="row mt">
@@ -355,19 +412,19 @@
         <span class="nq-grow"></span>
         <span class="lat" id="nqMs"></span>
       </div>
-      <div class="nq-q wait" id="nqQ">贴一段回答到左边，点「开始回放」。</div>
+      <div class="nq-q wait" id="nqQ">点左边的「开始说话」，题目就会跟着来。</div>
       <div class="nq-meta" id="nqMeta"></div>
     </div>
 
     <div class="qbar">
-      <input type="text" id="question" placeholder="你实际问出口的问题（回车记录，后面出题会以它为上下文）">
+      <input type="text" id="question" placeholder="面试官实际问出口的问题（点麦克风说话会自动写进来，也可以手打）">
       <button id="btnAsk" class="primary">记录并提问</button>
     </div>
 
     <div class="feed" id="feed">
       <div class="empty" id="emptyHint">
         还没有内容。<br>
-        贴一段回答到左边，点「开始回放」，<br>
+        点左边的「开始说话」，<br>
         上面就会跟着他的话出下一道题。
       </div>
     </div>
@@ -403,6 +460,12 @@ const CN = n => {
 let saidEl = null;       // 候选人这一段回答累积在哪个元素里
 let nqSeq = -1;          // 顶部面板上这条建议对应的块号
 let gotDraft = false;    // 这一块的问题是否已经提前上屏过
+
+/* 面试官说的话各自成段，和候选人的回答按角色分开记。
+   只保留 interviewer 这一个键：候选人那一路走 appendSaid（切块事件）。
+   两路都画会重复——见 appendLine 上面的说明。 */
+const saidBlockEl = { interviewer: null };
+let lineCount = 0;       // 轮询已经画过多少条对话流，用来做增量补行
 
 /* 已经完整画进面板的最大块号（只增不减）。
    注意 draft 不抬这个数：draft 只画了问题那一行，理由/依据还没到，
@@ -528,6 +591,25 @@ function handle(m){
       // 心跳。onmessage 已经把 lastMsgAt 刷新了，这里什么都不用做；
       // 列出来是为了让读代码的人知道这个 type 是有意忽略的，不是漏了。
       break;
+
+    case 'asr_line':
+      // 面试官说了一句完整的（候选人的话走 chunk 事件，见 appendLine 说明）
+      appendLine(m, m.replay);
+      break;
+
+    case 'asr_live':
+      // 还没定稿的中间结果。只显示，不进对话流、不进切块器。
+      showLive(m.role, m.text);
+      break;
+
+    case 'asr_state':
+      if(m.state === 'error'){
+        addNotice(`识别出错：${esc(m.message || '未知')}`, true);
+        if(m.role === myRole) { micRunning = false; syncMicUI(); }
+      } else if(m.state === 'closed' || m.state === 'stopped'){
+        if(m.role === myRole && micRunning){ micRunning = false; syncMicUI(); }
+      }
+      break;
   }
 }
 
@@ -544,7 +626,8 @@ function hideEmpty(){ const e = $('emptyHint'); if(e) e.remove(); }
    不是切块器的输出。切块是给 AI 用的，不是给他看的。 */
 function appendSaid(text){
   hideEmpty();
-  if(!saidEl){
+  // 面试官插话之后，候选人下一句要另起一块（appendLine 会把它标 closed）
+  if(!saidEl || saidEl.dataset.closed === '1'){
     saidEl = document.createElement('div');
     saidEl.className = 'saidblock';
     $('feed').appendChild(saidEl);
@@ -713,6 +796,16 @@ async function refreshState(){
     const made = (s.history || []).length;
 
     pollBackfill(s.history);
+    // 对话流也补：手机走隧道时 SSE 不通，面试官说的话只能靠这里上屏
+    pollLines(s.transcript);
+    /* 服务端已经在替我这个角色听的时候，把按钮显示成「正在说话」。
+       典型场景：这台设备刷新了页面——麦克风停了，但服务端那一路还开着，
+       按钮却显示「开始说话」，人会再点一次，等于开了第二路。
+       只在本地确实没在采集时才跟随（micStream 为空即没采集）。 */
+    if(!micStream && s.asr){
+      const on = s.asr[myRole] === 'listening';
+      if(on !== micRunning){ micRunning = on; syncMicUI(); }
+    }
 
     $('stChunks').textContent = heard;
     $('stApplied').textContent = made;
@@ -871,6 +964,16 @@ $('btnHistClose').onclick = () => { $('histWrap').style.display = 'none'; };
 $('histWrap').onclick = e => { if(e.target.id === 'histWrap') $('histWrap').style.display = 'none'; };
 
 /* ── 交互 ── */
+$('btnReplayOpen').onclick = () => {
+  $('replaySec').style.display = 'block';
+  $('micSec').style.display = 'none';
+  $('replayText').focus();
+};
+$('btnReplayClose').onclick = () => {
+  $('replaySec').style.display = 'none';
+  $('micSec').style.display = 'block';
+};
+
 $('btnSaveMat').onclick = async () => {
   const text = $('materials').value;
   // 名字默认取内容里第一个像标题的行，取不到就用时间。
@@ -970,9 +1073,271 @@ $('btnSaveCfg').onclick = async () => {
   refreshState();
 };
 
-/* ── 启动 ── */
+/* ══════════════════════════════════════════════════════════════
+   麦克风：把浏览器听到的声音变成文字
+   ══════════════════════════════════════════════════════════════
+
+   为什么不用浏览器的 Web Speech API：
+   它（Chrome 的 webkitSpeechRecognition）看着零成本，但两个硬伤要命——
+   ① 只认一个麦克风，没法让面试官和候选人各用一台设备分别识别；
+   ② 它的中间结果是「整句重写」，而且不告诉你哪句是最终的，
+      拿它往切块器里灌会把同一句话反复累积（这是接真实 ASR 最容易踩的坑，
+      在接阿里云之前就在代码注释里记过一次）。
+   所以走服务端：这里只负责采集 PCM 往上传，识别和分句都在服务端做。
+
+   采样率必须降到 16000：阿里云要求 PCM 16k / 16bit / 单声道。
+   浏览器的 AudioContext 一般是 48k，所以要用 OfflineAudioContext 转。
+   ── 为什么不用 MediaRecorder：它只给 webm/opus，服务端还得解码，
+      在 Node 里没有内置解码器，等于要多一个依赖。PCM 是裸的，谁都读得懂。 */
+
+/* 这台设备代表谁。两个人各开一台，各自选自己的角色。
+   存在 localStorage 里：刷新页面、锁屏再回来，不该又变回默认值。 */
+let myRole = localStorage.getItem('micRole') === 'interviewer' ? 'interviewer' : 'candidate';
+
+let micStream = null;    // MediaStream
+let micCtx = null;       // AudioContext
+let micNode = null;      // ScriptProcessor
+let micSink = null;      // 零音量 Gain，把图捋顺（见 startMic 里的说明）
+let micRunning = false;
+let micSending = 0;      // 还在飞的 /api/asr/feed 请求数，用来做背压
+let micPending = [];     // 攒着还没发的 PCM 块
+let micTimer = null;     // 定时冲积压音频的兜底（见 startMic 结尾）
+
+const MIC_RATE = 16000;
+const MIC_CHUNK_MS = 250;        // 多久发一次音频
+const MIC_MAX_INFLIGHT = 4;      // 同时最多几个在途请求：网差时宁可攒着，也不要把内存灌爆
+
+/* 降采样到 16k 并转成 16bit 小端 PCM。
+   ★ 必须经过一个真滤波器，不能直接每 3 个点取 1 个：
+     48k→16k 直接抽样会把 8k 以上的声音「折叠」回可听频段（混叠），
+     表现为识别结果里冒出莫名其妙的字，很难查。
+     OfflineAudioContext 走的是浏览器的正经重采样，顺手就把滤波做了。 */
+async function toPcm16k(float32, srcRate){
+  const off = new OfflineAudioContext(1, Math.ceil(float32.length * MIC_RATE / srcRate), MIC_RATE);
+  const buf = off.createBuffer(1, float32.length, srcRate);
+  buf.copyToChannel(float32, 0);
+  const src = off.createBufferSource();
+  src.buffer = buf;
+  src.connect(off.destination);
+  src.start();
+  const rendered = await off.startRendering();
+  const f = rendered.getChannelData(0);
+
+  const out = new DataView(new ArrayBuffer(f.length * 2));
+  for(let i = 0; i < f.length; i++){
+    // 夹一下再转：超出 [-1,1] 的样本直接乘 32767 会绕回成反相的噪音
+    const v = Math.max(-1, Math.min(1, f[i]));
+    out.setInt16(i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return out.buffer;
+}
+
+async function flushMic(){
+  if(!micPending.length || !micRunning) return;
+  if(micSending >= MIC_MAX_INFLIGHT) return;   // 等下一次 timer 再试
+
+  // 把攒着的几块合成一个请求发。发得碎会顶到浏览器单域名的连接数上限，
+  // 识别就会断断续续。
+  const parts = micPending; micPending = [];
+  const body = new Blob(parts);
+  micSending++;
+  try{
+    await fetch(`/api/asr/feed?s=${encodeURIComponent(SESSION)}&role=${myRole}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body
+    });
+  }catch(_){
+    // 发失败就是丢这 250ms 的音。不重试：重发会让音频错位，
+    // 识别结果对不上时间轴，比丢一点更糟。
+  }finally{
+    micSending--;
+  }
+}
+
+async function startMic(){
+  if(micRunning) return;
+  $('btnMic').disabled = true;
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        // 这三个开关很关键：
+        // 回声消除：否则面试官那台设备会从扬声器听到候选人，重复识别
+        // 降噪：键盘声、风扇声进去会变成零碎的字
+        // 自动增益：说话有远有近，不加它远处的句子会识别不出来
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    // 先在服务端开好 WS，再开始送音频。反过来的话开头几百毫秒会被丢掉。
+    const r = await fetch('/api/asr/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: SESSION, role: myRole })
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || '服务端开不了识别');
+
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // 手机浏览器上 AudioContext 默认是 suspended，要显式 resume，
+    // 否则 ScriptProcessor 一次都不回调，表现为「点了开始但一句话都没有」。
+    if(micCtx.state === 'suspended') await micCtx.resume();
+
+    const source = micCtx.createMediaStreamSource(micStream);
+    micNode = micCtx.createScriptProcessor(4096, 1, 1);
+    micSink = micCtx.createGain();
+    micSink.gain.value = 0;   // 不静音的话会从扬声器里听到自己的声音（啸叫）
+
+    const pendingBuf = [];
+    let pendingLen = 0;
+    const need = Math.round(MIC_RATE * MIC_CHUNK_MS / 1000);
+
+    micNode.onaudioprocess = async e => {
+      if(!micRunning) return;
+      const input = e.inputBuffer.getChannelData(0);
+      // 转码是异步的，这里必须立刻复制一份：inputBuffer 会被浏览器复用，
+      // 不复制的话等 await 回来，数组里的内容已经是别的时刻了。
+      const copy = new Float32Array(input);
+      pendingBuf.push(copy);
+      pendingLen += copy.length;
+      if(pendingLen < micCtx.sampleRate * MIC_CHUNK_MS / 1000) return;
+
+      const merged = new Float32Array(pendingLen);
+      let off = 0;
+      for(const b of pendingBuf){ merged.set(b, off); off += b.length; }
+      pendingBuf.length = 0; pendingLen = 0;
+
+      micPending.push(await toPcm16k(merged, micCtx.sampleRate));
+      flushMic();
+    };
+
+    source.connect(micNode);
+    micNode.connect(micSink);
+    micSink.connect(micCtx.destination);   // 必须连到 destination 才会被驱动，哪怕音量是 0
+
+    micRunning = true;
+    syncMicUI();
+    // 定时兜底：onaudioprocess 的节奏不稳，网慢的时候要有个地方重试积压的块
+    micTimer = setInterval(flushMic, MIC_CHUNK_MS);
+  }catch(e){
+    await stopMic();
+    micError(e.message || String(e));
+  }finally{
+    $('btnMic').disabled = false;
+  }
+}
+
+async function stopMic(){
+  if(!micRunning && !micStream) return;
+  micRunning = false;
+  clearInterval(micTimer); micTimer = null;
+
+  if(micNode){ try{ micNode.disconnect(); }catch(_){} micNode = null; }
+  if(micSink){ try{ micSink.disconnect(); }catch(_){} micSink = null; }
+  if(micCtx){ try{ await micCtx.close(); }catch(_){} micCtx = null; }
+  // 麦克风必须显式停轨：不停的话浏览器地址栏那个红点一直亮着，
+  // 用户会以为还在录音，不知道该不该关页面。
+  if(micStream){ for(const t of micStream.getTracks()) try{ t.stop(); }catch(_){} micStream = null; }
+
+  micPending = [];
+  // 先把剩下的音频冲出去再关连接，否则最后半句会被吞掉
+  try{
+    await fetch('/api/asr/stop', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: SESSION, role: myRole })
+    });
+  }catch(_){}
+  syncMicUI();
+}
+
+function syncMicUI(){
+  const b = $('btnMic');
+  b.textContent = micRunning ? '● 正在说话（点这里暂停）' : '开始说话';
+  b.className = 'micbtn' + (micRunning ? ' on' : '');
+  $('micWho').textContent = myRole === 'interviewer' ? '我是面试官' : '我是面试者';
+  $('micWho').className = 'pill' + (myRole === 'interviewer' ? ' warn' : '');
+}
+
+function micError(msg){
+  addNotice(`麦克风用不了：${msg}`, true);
+  flash('麦克风没开起来，看下面的提示');
+  const h = $('micHint');
+  h.innerHTML = `<b>开不了麦克风</b>：${esc(msg)}<br>
+    手机上要用 https 打开（http 地址浏览器不给麦克风权限）；电脑上 localhost 可以。<br>
+    实在不行就用上面的「模拟回放」，把要说的话粘进去。`;
+}
+
+$('btnMic').onclick = async () => {
+  if(micRunning) await stopMic();
+  else await startMic();
+};
+
+$('btnRole').onclick = async () => {
+  if(micRunning) await stopMic();   // 换角色必须先停：音频要发到另一路去
+  myRole = myRole === 'interviewer' ? 'candidate' : 'interviewer';
+  localStorage.setItem('micRole', myRole);
+  syncMicUI();
+  flash(myRole === 'interviewer'
+    ? '这台设备现在是【面试官】：你说的每句话会变成问题'
+    : '这台设备现在是【面试者】：你说的话会喂给 AI 出题');
+};
+
+/* 中间结果和定稿都画在这一个框里。
+   中间结果用完就丢、定稿才进对话流——两者混在一起会让「他已经说到哪了」
+   变得看不出来。 */
+function showLive(role, text){
+  if(role !== myRole && text) return;   // 只显示自己这一路，别把别人的话也贴在自己框里
+  const el = $('micShow');
+  el.textContent = text || '';
+  el.style.color = text ? 'var(--dim)' : '';
+}
+
+/* ── 面试官说的话 ──
+   ★ 这里只画面试官，不画候选人：候选人的话已经在走 chunk 事件（appendSaid），
+     再从 asr_line 画一遍就会同一句话出现两次。这个坑很隐蔽——
+     两路来源都是「对的」，只是重复了。
+   面试官的句子不进切块器（那不是回答），所以只有这一路。 */
+function appendLine(line, replay){
+  if(!line || !line.text) return;
+  if(line.role !== 'interviewer') return;
+  hideEmpty();
+
+  let el = saidBlockEl.interviewer;
+  if(!el || el.dataset.closed === '1'){
+    el = document.createElement('div');
+    el.className = 'saidblock q';
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = '面试官';
+    el.appendChild(who);
+    $('feed').appendChild(el);
+    saidBlockEl.interviewer = el;
+  }
+  el.appendChild(document.createTextNode(line.text));
+
+  // 面试官一开口，候选人那一段就该断了：下一句回答是新的一段
+  if(saidEl) saidEl.dataset.closed = '1';
+
+  scroll();
+  // 他刚问出口的这句话直接填进输入框：多数时候不用改，回车就能记录。
+  // 不自动提交——万一识别错一个字，自动记进去就污染了跨场记忆。
+  if(!replay) $('question').value = line.text;
+}
+
+/* 轮询兜底：SSE 不通时对话流也要能补上来 */
+function pollLines(transcript){
+  const list = transcript || [];
+  if(list.length < lineCount){ lineCount = 0; saidBlockEl.interviewer = null; }
+  for(let i = lineCount; i < list.length; i++) appendLine(list[i], true);
+  lineCount = list.length;
+}
+
+
 (async () => {
   connect();
+  syncMicUI();
   try{
     const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}`)).json();
     $('cfgBase').value = s.conf.baseUrl;

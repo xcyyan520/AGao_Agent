@@ -30,6 +30,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { IncrementalQuestioner, Chunker } from './engine.mjs';
 import { openStore } from './store.mjs';
+import { AsrStream } from './asr.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8900);
@@ -93,6 +94,17 @@ function newSession(id, conf = {}) {
     replaying: false,
     replayAbort: false,
     hydrated: false,      // 这场是不是已经从库里恢复过了（避免每轮请求都恢复一次）
+
+    /* ── 语音识别 ──
+       每个角色一路连接（面试官 / 候选人各一台设备各一个麦克风）。
+       两个人的声音从采集端就分开了，所以**不需要声纹分离**——
+       谁连上来的就标谁，这比任何 diarization 都准。 */
+    asr: { candidate: null, interviewer: null },
+    // 还没定稿的中间结果，只用来刷屏，绝不拿去出题（它会变）。
+    live: {},
+    // 面试官说的话先攒在这里，等他真的停下来再当成一个问题发出去。
+    qBuf: '',
+    qTimer: null,
   };
 
   s.judge = new IncrementalQuestioner(s.conf);
@@ -170,6 +182,11 @@ function newSession(id, conf = {}) {
     });
   });
 
+  /* 面试官问出一个新问题。
+     ★ 这是【唯一】推送 'question' 的地方：/api/question、面试官的语音识别、
+       以后可能加的别的入口，全都走 judge.newQuestion()，由它 emit。
+       别在调用处再补一句 send('question')——实测那样会让同一句推两遍，
+       页面上出现两条一模一样的「你实际问出口了」。 */
   s.judge.on('question', q => send(s, 'question', q));
 
   sessions.set(id, s);
@@ -235,6 +252,143 @@ function getSession(id) {
   return sessions.get(id) || newSession(id);
 }
 
+/* ────────────────────── 语音识别（ASR）──────────────────────
+
+   形态：面试官一台设备、候选人另一台设备，各自打开同一个网址，
+   各自点自己那一栏的「开始」。服务端给每个角色开一路独立的识别连接。
+
+   ★ 为什么不做说话人分离：
+     两个人各用自己的麦克风，音轨在物理上就是分开的——谁连上来的就标谁，
+     比任何声纹算法都准。硬要在一个麦克风上分两个人，反而会引入「判错人」
+     的风险，而判错人的后果是候选人的话被当成问题、出题依据全乱。
+     （另外，阿里云实时 ASR 本身也不支持 diarization，只有录音文件转写支持。）
+
+   ★ 为什么音频走服务端而不是浏览器直连 DashScope：
+     那个 WebSocket 握手要带 Authorization 头，而浏览器的 WebSocket
+     构造函数不允许设请求头。想直连就得把 Key 塞进页面 = 谁都能拿走。
+     代价是音频要多走一跳（同机或局域网内可忽略）。 */
+
+/** ASR 用哪个 Key：优先独立的 ASR_KEY，否则复用 LLM 的 Key。
+ *  两家本来就是同一个百炼账号，绝大多数人不用配第二个。 */
+function asrKey() {
+  const k = process.env.ASR_KEY || (CONF.apiKey !== 'test' ? CONF.apiKey : '');
+  return k;
+}
+
+/** 一句话定稿后要做的事，按角色分岔。
+ *  这是整个语音方案的分水岭：同样一句识别结果，
+ *  面试官说的要去当「问题」，候选人说的要去当「回答」。 */
+function onAsrFinal(s, role, text) {
+  const line = { role, text, at: Date.now(), final: true };
+  s.transcript.push(line);
+  // 只留最近 200 条：面板最多显示这么多，再多只是占内存
+  if (s.transcript.length > 200) s.transcript.splice(0, s.transcript.length - 200);
+  send(s, 'asr_line', line);
+
+  if (role === 'candidate') {
+    /* 候选人的话 = 回答。走和「模拟回放」完全一样的切块入口，
+       这样接真麦克风之后，切块策略、背压合并、出题链路全都不用改。 */
+    s.chunker.push(text);
+    return;
+  }
+
+  /* 面试官的话 = 问题。
+     不逐句当问题：他可能先「嗯，好」再说正事，逐句发会把「嗯」也
+     当成一个问题记进历史，污染跨场记忆。
+     先攒起来，停顿 800ms 再一起发——他真要问的时候会连着说完一句。 */
+  s.qBuf = (s.qBuf ? s.qBuf + text : text).trim();
+  clearTimeout(s.qTimer);
+  s.qTimer = setTimeout(() => {
+    const q = s.qBuf.trim();
+    s.qBuf = '';
+    if (q.length < 2) return;         // 「嗯」「好」这种不算问题
+    askAsrQuestion(s, q);
+  }, ASR_QUESTION_DEBOUNCE_MS);
+  s.qTimer.unref?.();
+}
+
+/** 把面试官亲口说出来的那句话，当成一个正式的提问处理。
+ *  路径和页面上的「记录并提问」完全一致，保证两条入口行为不岔。 */
+async function askAsrQuestion(s, q) {
+  try {
+    s.chunker.flushNow('beforeQuestion');
+    // 先当上一题结束落盘（newQuestion 会清空 answer，必须写在前面）
+    dbWrite(st => st.addTurn(s.id, q, s.judge.answer || null), 'addTurn');
+    /* 注意：这里【不要】再 send('question')。
+       newQuestion() 内部会 emit('question')，上面已经有一份监听器把它转成
+       SSE 推下去了。再补一句的结果是同一句话推两遍——实测面试官说一句，
+       页面上会出现两条一模一样的「你实际问出口了」。
+       这个 bug 特别隐蔽：两处代码单独看都是对的，只有连起来才重复。 */
+    await s.judge.newQuestion(q);
+  } catch (e) {
+    console.error('[asr:question]', e.message);
+  }
+}
+
+/** 停掉某个角色的识别连接。可重复调用（没开就是空操作）。 */
+async function stopAsr(s, role) {
+  const a = s.asr[role];
+  if (!a) return false;
+  s.asr[role] = null;
+  s.live[role] = '';
+  try {
+    const lines = await a.stop();
+    console.log(`[asr:${role}] 停了，${a.bytes} 字节音频 / ${lines.length} 句`);
+  } catch (e) {
+    console.error(`[asr:${role}] 停止时出错：`, e.message);
+  }
+  send(s, 'asr_state', { role, state: 'stopped' });
+  return true;
+}
+
+/** 开一路识别。已经开着就先停掉再重开（用户连点两次「开始」不该报错）。 */
+async function startAsr(s, role) {
+  await stopAsr(s, role);
+
+  const key = asrKey();
+  if (!key) {
+    const msg = '没有可用的 API Key：设置 ASR_KEY，或把模型 Key 配好（两者可以是同一个）';
+    send(s, 'asr_state', { role, state: 'error', message: msg });
+    return { ok: false, error: msg };
+  }
+
+  const a = new AsrStream({ apiKey: key });
+  s.asr[role] = a;
+
+  a.on('interim', p => {
+    // 中间结果只刷屏，绝不进切块/出题——它下一秒就会变。
+    s.live[role] = p.text;
+    send(s, 'asr_live', { role, text: p.text });
+  });
+  a.on('final', p => {
+    s.live[role] = '';
+    onAsrFinal(s, role, p.text);
+  });
+  a.on('error', p => {
+    console.error(`[asr:${role}]`, p.error.message);
+    send(s, 'asr_state', { role, state: 'error', message: p.error.message });
+  });
+  a.on('closed', () => {
+    if (s.asr[role] === a) { s.asr[role] = null; send(s, 'asr_state', { role, state: 'closed' }); }
+  });
+
+  send(s, 'asr_state', { role, state: 'connecting' });
+  try {
+    await a.start();
+  } catch (e) {
+    s.asr[role] = null;
+    send(s, 'asr_state', { role, state: 'error', message: e.message });
+    return { ok: false, error: e.message };
+  }
+  send(s, 'asr_state', { role, state: 'listening' });
+  return { ok: true };
+}
+
+/** 面试官停顿多久算「问完了」。太短会把一句话拆成两个问题，
+ *  太长又会让出题等太久——他问完就想要下一题。 */
+const ASR_QUESTION_DEBOUNCE_MS = 800;
+
+
 /* ────────────────────────── HTTP ────────────────────────── */
 
 function cors(res) {
@@ -253,6 +407,22 @@ function readBody(req) {
       try { resolve(raw.trim() ? JSON.parse(raw) : {}); }
       catch (e) { reject(new Error('请求体不是合法 JSON: ' + e.message)); }
     });
+    req.on('error', reject);
+  });
+}
+
+/** 收原始二进制（音频帧用它，不用上面的 JSON 解析——PCM 不是 JSON）。
+ *  maxBytes 是硬上限：麦克风一旦漏了「停止」，没人拦着就会一直往内存里灌。 */
+function readRaw(req, maxBytes = 4 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let n = 0;
+    req.on('data', c => {
+      n += c.length;
+      if (n > maxBytes) { req.destroy(); return reject(new Error('音频块太大')); }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -292,6 +462,11 @@ const server = http.createServer(async (req, res) => {
         // type 写在最后：payload 里如果有同名字段，不能让它盖掉路由用的 type。
         res.write(`data: ${JSON.stringify({ ...r, type: 'nextq', replay: true })}\n\n`);
       }
+      // 对话流也补一遍：另一台设备后打开时，前面说过的话要能看见，
+      // 否则两个人屏幕上看到的内容对不上，会以为对方没在说话。
+      for (const line of s.transcript) {
+        res.write(`data: ${JSON.stringify({ ...line, type: 'asr_line', replay: true })}\n\n`);
+      }
       req.on('close', () => {
         s.clients.delete(res);
         if (!s.clients.size) stopHeartbeat(s);
@@ -314,6 +489,19 @@ const server = http.createServer(async (req, res) => {
           enabled: !!store,
           materialId: s.materialId ?? null,
           priorAsked: s.judge.priorAsked.length,
+        },
+        /* ── 两边同步用 ──
+           面试官和候选人各看一台屏幕，靠这几项保持一致：
+           - transcript：已经定稿的对话流（谁说的、说了什么、什么时候）
+           - live：还没定稿的中间结果，只用来显示「他正在说…」
+           - asr：每一路识别的状态，决定按钮显示「开始」还是「听写中」
+           注意 transcript 是【全量】的：一场面试几百句，几十 KB，
+           两秒拉一次没有压力，而且省掉了增量同步的复杂度。 */
+        transcript: s.transcript,
+        live: s.live,
+        asr: {
+          candidate: s.asr.candidate ? 'listening' : 'off',
+          interviewer: s.asr.interviewer ? 'listening' : 'off',
         },
       }));
     }
@@ -375,6 +563,41 @@ const server = http.createServer(async (req, res) => {
       // 只有真有回放在跑时才插旗子。空闲时点「停止」是个空操作，
       // 不能让它污染下一次回放（见 newSession 里 replaying 的注释）。
       if (s.replaying) s.replayAbort = true;
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true }));
+    }
+
+    /* ── 语音识别 ──
+       三个端点：开、喂音频、停。
+       音频用 POST 原始字节（不经 base64）：一秒钟的 16k 单声道 PCM 是 32KB，
+       base64 之后变 43KB 而且要多一次编解码。每 250ms 一发，不值得。 */
+    if (p === '/api/asr/start' && req.method === 'POST') {
+      const body = await readBody(req);
+      const s = getSession(body.session || 'default');
+      const role = body.role === 'interviewer' ? 'interviewer' : 'candidate';
+      const r = await startAsr(s, role);
+      res.writeHead(r.ok ? 200 : 500, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify(r));
+    }
+
+    if (p === '/api/asr/feed' && req.method === 'POST') {
+      const s = getSession(url.searchParams.get('s') || 'default');
+      const role = url.searchParams.get('role') === 'interviewer' ? 'interviewer' : 'candidate';
+      const a = s.asr[role];
+      const buf = await readRaw(req);
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      // 没开着识别就静默丢弃。这里报错没意义：用户点了「停止」之后，
+      // 浏览器那边还有半秒在途的音频块，那是正常的收尾。
+      if (!a || !buf.length) return res.end(JSON.stringify({ ok: true, accepted: 0 }));
+      const ok = a.push(buf);
+      return res.end(JSON.stringify({ ok: true, accepted: ok ? buf.length : 0 }));
+    }
+
+    if (p === '/api/asr/stop' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
+      const s = getSession(body.session || url.searchParams.get('s') || 'default');
+      const role = (body.role || url.searchParams.get('role')) === 'interviewer' ? 'interviewer' : 'candidate';
+      await stopAsr(s, role);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify({ ok: true }));
     }
@@ -505,7 +728,12 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req).catch(() => ({}));
       const id = body.session || url.searchParams.get('s') || 'default';
       const old = sessions.get(id);
-      if (old) for (const r of old.clients) { try { r.end(); } catch (_) {} }
+      if (old) {
+        // 重置时要把两路识别都关掉，否则那两条 WebSocket 会一直挂着
+        // 往一个已经没人看的会话里灌音频，白烧额度。
+        for (const role of ['candidate', 'interviewer']) await stopAsr(old, role);
+        for (const r of old.clients) { try { r.end(); } catch (_) {} }
+      }
       sessions.delete(id);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify({ ok: true, session: id }));
