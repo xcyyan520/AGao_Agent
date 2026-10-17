@@ -7,7 +7,7 @@
    但写 'test'（不带下划线）就会误伤任何以 test 开头的东西——宁可窄不要宽。 */
 import { openStore } from '../store.mjs';
 
-const PREFIXES = ['uimic_', 'asr_', 'asr', 'ui_', 'uib_', 'tunnel_', 'corpus_', 'p_', 'test_', 'probe_'];
+const PREFIXES = ['uimic_', 'uihist_', 'asr_', 'asr', 'ui_', 'uib_', 'tunnel_', 'corpus_', 'p_', 'test_', 'probe_', 'twodev_', 'captest', 'uifix'];
 
 const st = openStore();
 const sessions = st.listSessions(1000);

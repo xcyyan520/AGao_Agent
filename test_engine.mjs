@@ -15,7 +15,7 @@
 
 import http from 'node:http';
 import {
-  IncrementalQuestioner, parseNext, pickQuestion, cleanStr,
+  IncrementalQuestioner, parseNext, pickQuestion, cleanStr, MATERIAL_HARD_CAP,
 } from './engine.mjs';
 
 let pass = 0, fail = 0;
@@ -502,6 +502,47 @@ console.log('\n\x1b[1m【12】从库里恢复：重启后记忆不丢、块号�
   empty.setPriorAsked([]);
   const m2 = empty._buildMessages({ seq: 1, text: 'x' });
   ok('没有跨场记忆时不塞空块', !m2[2].content.includes('以前几场'));
+}
+
+/* ══【12】材料长度上限：超长材料必须被截断，并且如实上报 ══════════════
+   为什么要有这一段：materials 是唯一没有上限的输入，而它会被每一块
+   重发一遍。实测 10 万字开始单次请求就撞上 8 秒超时（详见 engine.mjs
+   里 _capMaterials 的注释）。截断本身容易写，容易写错的是「报不报」——
+   静默截断会让人以为 AI 看到了整份材料，然后奇怪它为什么总问前半段。 */
+console.log('\n【12】材料长度上限');
+{
+  const q = new IncrementalQuestioner({ baseUrl: 'http://127.0.0.1:1' });
+  q.on('error', () => {});
+
+  ok('上限是 8 万字', MATERIAL_HARD_CAP === 80000, String(MATERIAL_HARD_CAP));
+
+  q.setContext({ materials: 'x'.repeat(1000) });
+  ok('没超限时不截断', q.materials.length === 1000);
+  ok('没超限时 dropped 为 0', q.materialsDropped === 0);
+
+  q.setContext({ materials: 'x'.repeat(MATERIAL_HARD_CAP) });
+  ok('恰好等于上限不截断', q.materials.length === MATERIAL_HARD_CAP);
+  ok('恰好等于上限 dropped 仍为 0', q.materialsDropped === 0);
+
+  q.setContext({ materials: 'x'.repeat(MATERIAL_HARD_CAP + 5000) });
+  ok('超限时截到上限', q.materials.length === MATERIAL_HARD_CAP);
+  ok('超限时如实报出砍了多少', q.materialsDropped === 5000, String(q.materialsDropped));
+  ok('summary() 里带出被砍的字数', q.summary().materialsDropped === 5000);
+  ok('summary() 里带出实际字数', q.summary().materialsChars === MATERIAL_HARD_CAP);
+
+  // 换一份短的：之前被砍的记录必须清零，
+  // 否则界面会一直挂着「超出 N 字已省略」这条早就过期的提示。
+  q.setContext({ materials: 'x'.repeat(100) });
+  ok('换短材料后 dropped 归零', q.materialsDropped === 0);
+
+  q.setContext({ materials: 'x'.repeat(MATERIAL_HARD_CAP + 1), currentQuestion: '问点啥？' });
+  ok('截断不影响当前问题', q.currentQuestion === '问点啥？');
+
+  // 提示词里真的只放截断后的内容：这是这个上限唯一真正的目的
+  q.setContext({ materials: 'y'.repeat(MATERIAL_HARD_CAP + 5000) });
+  const m = q._buildMessages({ seq: 1, text: '他说了一段' });
+  ok('提示词里没有塞进超限的部分',
+    m[0].content.length < MATERIAL_HARD_CAP + 4000, `${m[0].content.length} 字符`);
 }
 
 /* ══════════════════════════════════════════════════════════════════════ */

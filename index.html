@@ -896,9 +896,14 @@ async function useMaterial(id, name){
   // 把正文拉回来填进文本框，让人看得见到底装了哪份。
   const g = await (await fetch('/api/materials/get?id=' + id)).json();
   $('materials').value = g.material.text;
+  // 材料库里的正文永远是完整的，这里显示的是**装进去之后**实际生效的字数。
+  // 超上限时两者不一样，得说清楚是哪一种情况。
   $('matStat').textContent = j.chars + ' 字';
+  if (j.dropped) $('matStat').textContent += ` · 超出 ${j.dropped} 字已省略`;
   $('matLib').style.display = 'none';
-  flash(`已装载「${name}」`);
+  flash(j.dropped
+    ? `已装载「${name}」，但超上限，只用前 ${j.chars} 字`
+    : `已装载「${name}」`);
 }
 
 $('btnMatLib').onclick = () => {
@@ -1097,8 +1102,16 @@ $('btnSaveMat').onclick = async () => {
     body: JSON.stringify({ session:SESSION, materials:text, name })
   });
   const j = await r.json();
+  /* 材料有 8 万字上限（engine.mjs 的 MATERIAL_HARD_CAP）。超了会被截断，
+     而截断是静默的——不显示出来的话，人只会觉得「AI 怎么没看到我稿子后半段」。
+     所以只要 dropped > 0，就把这件事明写在字数旁边。 */
   $('matStat').textContent = j.chars + ' 字';
-  flash(`已保存到材料库「${name}」，下次不用再粘`);
+  if (j.dropped) {
+    $('matStat').textContent += ` · 超出 ${j.dropped} 字已省略`;
+    flash(`材料 ${j.chars + j.dropped} 字，超上限，只用了前 ${j.chars} 字（AI 看不到后面 ${j.dropped} 字）`);
+  } else {
+    flash(`已保存到材料库「${name}」，下次不用再粘`);
+  }
 };
 
 $('materials').addEventListener('input', e => {

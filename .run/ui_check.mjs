@@ -438,6 +438,34 @@ if (!fs.existsSync(MIC_WAV)) {
    404 的话，用户看到的是永远转圈的「加载中…」，比没有按钮更糟。        */
 console.log('\n═══ 材料库 / 历史面试 ═══');
 
+/* 先造一场「两个人真的说过话」的场次。
+   ------------------------------------------------------------------
+   为什么必须自己造：这个检查要验证的是「面试官说的话也能被还原」，
+   而它原来靠挑库里第一场有提问记录的数据。跑得越久越容易翻车——
+   某次清理之后库里只剩候选人独白的场次，检查就红了，看起来像产品
+   坏了，其实只是没有样本。（实际就红过一次：0 块面试官。）
+   自己造样本还有个好处：内容固定，失败时能一眼看出是加载错了还是
+   数据本来就不对。                                                     */
+const HIST_SESSION = 'uihist_' + Date.now();
+const HIST_Q = '那你这个状态是怎么持久化的？多副本会不会串台？';
+const HIST_A = '状态存在 Redis 里，thread_id 带客户前缀。';
+
+await fetch(`${APP}/api/materials`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ session: HIST_SESSION, materials: '历史样本材料：讲 Redis 和 LangGraph。' }),
+});
+// 候选人先说一段（走 feed，和真实链路同一个入口）
+await fetch(`${APP}/api/feed`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ session: HIST_SESSION, text: HIST_A }),
+});
+// 面试官再问一句：这一步会把 interviewer 行写进对话流
+await fetch(`${APP}/api/question`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ session: HIST_SESSION, question: HIST_Q }),
+});
+await sleep(400);
+
 await evalJs('document.getElementById("btnMatLib").click()');
 await sleep(700);
 const lib = await evalJs(`(() => {
@@ -544,6 +572,13 @@ check('标了这场有多少句对话', loaded.saysCount);
 await evalJs('document.getElementById("btnHistClose").click()');
 await sleep(300);
 check('历史弹层能关掉', await evalJs('document.getElementById("histWrap").style.display === "none"'));
+
+/* 删掉自己造的那一场，别在用户库越积越多。
+   只 reset 内存不够——材料库和历史面试读的是 SQLite。 */
+await fetch(`${APP}/api/sessions/delete`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ id: HIST_SESSION }),
+}).catch(() => {});
 
 const failed = results.filter(r => !r.pass);
 console.log('\n' + '─'.repeat(60));

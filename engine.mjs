@@ -154,6 +154,17 @@ const WEAK_END = /[，、：,]/;
 /* 英文/数字词的字符集：切点落在这两种字符中间就会把词劈开 */
 const WORD_CHAR = /[A-Za-z0-9_]/;
 
+/**
+ * 材料正文的硬上限（字符数）。
+ *
+ * 8 万字这个数不是拍脑袋：实测 10 万字开始，单次请求会随机撞上
+ * timeoutMs（默认 8 秒）而静默失败——材料越长输入 token 越多，
+ * 首字延迟跟着涨，过了半山腰就时快时慢地不题。详细数据见 `_capMaterials`。
+ *
+ * 8 万字对这个工具已经很宽了：岗位描述 + 简历 + 一段项目陈述通常在两万字以内。
+ */
+export const MATERIAL_HARD_CAP = 80000;
+
 /** 从 floor 往后找第一个能当切点的边界位置（返回"切到哪"，即下标+1）。 */
 function firstBoundary(str, re, floor) {
   for (let i = Math.max(0, floor); i < str.length; i++) {
@@ -382,6 +393,7 @@ export class IncrementalQuestioner extends EventEmitter {
     this.seq = 0;                 // 已分配的块号
     this.appliedSeq = -1;         // 已应用的最高块号
     this.materials = '';          // 逐字稿 / 项目资料，整场不变
+    this.materialsDropped = 0;    // 因为超长被砍掉的字数（见 _capMaterials）
     this.currentQuestion = '';    // 面试官当前的问题
     this.asked = [];              // 已经问过的问题，按时间顺序，纯追加
     // 本场 AI 自己给过的建议，按时间顺序，纯追加。
@@ -416,8 +428,40 @@ export class IncrementalQuestioner extends EventEmitter {
   }
 
   setContext({ materials, currentQuestion } = {}) {
-    if (materials !== undefined) this.materials = materials;
+    if (materials !== undefined) this.materials = this._capMaterials(materials);
     if (currentQuestion !== undefined) this.currentQuestion = currentQuestion;
+  }
+
+  /**
+   * 材料超长时截断到 MATERIAL_HARD_CAP，并把截掉多少记下来。
+   *
+   * 为什么需要它：`materials` 是唯一没有上限的输入，而整份材料会**每一个块**
+   * 都拼进系统提示词重发一遍（见 `_buildMessages`）。花的是输入 token，
+   * 而且直接压在首字延迟上。实测（`deepseek-v4.1-flash`，同一段话发一次）：
+   *
+   *     1.7 万字 → 1.9s（正常，这就是那份 423 行逐字稿的量级）
+   *     3 万字   → 4.5s
+   *     7 万字   → 4.1s
+   *    10 万字   → 8.0s ← 撞上默认 timeoutMs，请求被 abort
+   *    14 万字   → 6.8s
+   *    20 万字   → 8.0s ← abort
+   *
+   * 注意 10 万那次失败和 14 万那次成功并存 —— 这不是一条干净的容量线，
+   * 而是**延迟随长度上升，在半山腰随机超时**。也就是说材料一旦过了某个量级，
+   * 表现不是「报错」而是「时快时慢地出不题」，最难查的那种。
+   *
+   * 8 万字以上对这个工具没有实际意义（面试材料是简历和项目陈述，不是一本书），
+   * 所以砍在这里。砍掉的部分按字符数算，写到 `materialsDropped` 上，
+   * 界面读 `summary()` 就能显示出来提醒人——静默截断比报错更坏。
+   */
+  _capMaterials(text) {
+    const s = String(text || '');
+    if (s.length <= MATERIAL_HARD_CAP) {
+      this.materialsDropped = 0;
+      return s;
+    }
+    this.materialsDropped = s.length - MATERIAL_HARD_CAP;
+    return s.slice(0, MATERIAL_HARD_CAP);
   }
 
   /**
@@ -763,6 +807,10 @@ export class IncrementalQuestioner extends EventEmitter {
       asked: this.asked,
       answer: this.answer,
       history: this.history,
+      // 材料被砍掉多少字。界面上要显示出来——静默截断会让人以为
+      // 「我明明粘了 20 万字它怎么没看到后面」，而它其实是故意砍的。
+      materialsChars: this.materials.length,
+      materialsDropped: this.materialsDropped,
     };
   }
 }

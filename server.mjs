@@ -673,7 +673,15 @@ const server = http.createServer(async (req, res) => {
         }
       }
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true, chars: s.judge.materials.length, materialId: s.materialId ?? null }));
+      /* chars 是【实际进提示词】的字数，dropped 是被上限砍掉的。
+         两个都给出来：只报 chars 会让人以为材料完整吃进去了，
+         而后面的题目质量对不上他手上那份 20 万字的稿子。 */
+      return res.end(JSON.stringify({
+        ok: true,
+        chars: s.judge.materials.length,
+        dropped: s.judge.materialsDropped || 0,
+        materialId: s.materialId ?? null,
+      }));
     }
 
     /* ── 材料库 ──
@@ -701,7 +709,12 @@ const server = http.createServer(async (req, res) => {
       s.materialId = m.id;
       dbWrite(st => st.ensureSession(s.id, m.id), 'ensureSession');
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true, chars: m.text.length, name: m.name }));
+      return res.end(JSON.stringify({
+        ok: true,
+        chars: s.judge.materials.length,
+        dropped: s.judge.materialsDropped || 0,
+        name: m.name,
+      }));
     }
 
     if (p === '/api/materials/delete' && req.method === 'POST') {
