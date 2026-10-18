@@ -7,7 +7,9 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 
-const URL_ = process.argv[2] || 'http://127.0.0.1:8799/?lobby=1';
+/* 默认打 8900（和 ui_check / probe_flow_ui 一致）。
+   `?lobby=1` 这个参数页面并不认识——裸地址本来就会落在大厅。 */
+const URL_ = process.argv[2] || 'http://127.0.0.1:8900/';
 const CHROME = ['C:/Users/xia-shana/.cache/puppeteer/chrome/win64-148.0.7778.97/chrome-win64/chrome.exe',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Users/xia-shana/AppData/Local/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));

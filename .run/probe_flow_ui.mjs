@@ -5,7 +5,10 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 
-const BASE = process.argv[2] || 'http://127.0.0.1:8799';
+/* 默认打正式那个 8900，和 ui_check / probe_lines 保持一致——
+   探针默认指向哪一个，决定了「直接跑一下」会不会在测试库上验证。
+   想在 8799 上跑就传参：node .run/probe_flow_ui.mjs http://127.0.0.1:8799 */
+const BASE = process.argv[2] || 'http://127.0.0.1:8900';
 const CHROME = ['C:/Users/xia-shana/.cache/puppeteer/chrome/win64-148.0.7778.97/chrome-win64/chrome.exe',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Users/xia-shana/AppData/Local/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));

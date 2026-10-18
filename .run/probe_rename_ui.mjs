@@ -5,7 +5,9 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 
-const BASE = process.argv[2] || 'http://127.0.0.1:8799';
+/* 默认和别的探针一样打 8900（正式那个服务）。
+   想在测试服务上跑就传参：node .run/probe_rename_ui.mjs http://127.0.0.1:8799 */
+const BASE = process.argv[2] || 'http://127.0.0.1:8900';
 const CHROME = ['C:/Users/xia-shana/.cache/puppeteer/chrome/win64-148.0.7778.97/chrome-win64/chrome.exe',
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Users/xia-shana/AppData/Local/Google/Chrome/Application/chrome.exe'].find(p => fs.existsSync(p));
