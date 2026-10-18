@@ -65,6 +65,44 @@ else bad('「开一间」还在首屏外', `top=${newRowTop} vh=${vh}`);
 ok('房间卡片数', String(cards));
 await shot('flow_1_lobby.png');
 
+/* ①.5 「怎么用」弹层：原来大厅底部那三段说明（各开一台设备 / 席位被占 /
+   麦克风要 https）在手机上被媒体查询整段藏掉了，现在收进问号弹层。
+   这里只验「点得开、关得掉、三条都在」——具体排版由 probe_help_prep.mjs 量。 */
+const helpOpenable = await ev(`(() => {
+  const b = document.getElementById('btnHelp');
+  if (!b) return { err: '没有问号按钮' };
+  const r = b.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { w: Math.round(r.width), h: Math.round(r.height), hitId: hit && (hit.id || hit.tagName) };
+})()`);
+if (helpOpenable.err) bad(helpOpenable.err);
+else if (helpOpenable.hitId === 'btnHelp') ok('大厅问号点得到', `${helpOpenable.w}×${helpOpenable.h}`);
+else bad('问号被别的东西盖住了', helpOpenable.hitId);
+
+await ev(`document.getElementById('btnHelp').click()`);
+await sleep(300);
+const helpShown = await ev(`(() => {
+  const w = document.getElementById('helpWrap');
+  const secs = [...w.querySelectorAll('.help-sec h3')].map(h => h.textContent.replace(/\\s+/g, ' ').trim());
+  return { disp: getComputedStyle(w).display, secs };
+})()`);
+if (helpShown.disp === 'flex') ok('问号能打开「怎么用」'); else bad('弹层没打开', helpShown.disp);
+const threeSecs = helpShown.secs.length === 3
+  && /两个人怎么配合/.test(helpShown.secs[0] || '')
+  && /麦克风/.test(helpShown.secs[1] || '')
+  && /房间和记录/.test(helpShown.secs[2] || '');
+if (threeSecs) ok('弹层里三条说明都在', helpShown.secs.join(' | '));
+else bad('三条说明不全', helpShown.secs.join(' | '));
+/* 原来那个 .lobby-tip 必须彻底没了：留着它就是两份文案、
+   手机上那份还是 hidden，改一处漏一处。 */
+if (await ev(`!!document.querySelector('.lobby-tip')`)) bad('旧的 .lobby-tip 还在（两份文案了）');
+else ok('旧的大厅说明块已彻底移除');
+
+await ev(`document.getElementById('helpWrap').click()`);
+await sleep(250);
+if (await ev(`getComputedStyle(document.getElementById('helpWrap')).display === 'none'`)) ok('点遮罩关得掉');
+else bad('点遮罩关不掉');
+
 // ② 大厅「开一间」→ 直接进房，页头有房间名
 const title = '流程 · ' + Date.now().toString().slice(-5);
 await ev(`(()=>{const i=document.getElementById('lobbyNewTitle'); i.value=${JSON.stringify(title)}; document.getElementById('lobbyNewGo').click();})()`);

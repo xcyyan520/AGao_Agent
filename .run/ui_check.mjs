@@ -378,11 +378,29 @@ const openState = await evalJs(`(() => {
   };
 })()`);
 check('点把手能展开', openState.prepOpen === true, openState.label);
+
+/* 动作块那个圆块的字形要在两态之间真的换。
+   ⚠️ 字形是 CSS 的 ::before content（见 index.html 的 .st-x i::before），
+   **不在 textContent 里** —— 读 textContent 永远是空串，会让这条断言变成
+   恒真的假测试。第一版就写错过一次，量出来的「展开后是 ✕」其实是图标那个 span。 */
+const glyph = await evalJs(`(() => {
+  const g = s => getComputedStyle(document.querySelector('#sideToggleArrow i'), '::before').content || '';
+  const strip = s => s.replace(/^["']|["']$/g, '');
+  const open = strip(g());
+  return { open, label: document.getElementById('sideToggleLabel').textContent };
+})()`);
+check('展开后动作块是 ✕（不是还写着 ▴）', glyph.open === '✕', `实际「${glyph.open}」`);
+check('展开后主标题变成「收起准备区」', /收起/.test(glyph.label), glyph.label);
 check('展开后材料框出现', openState.matDisplay !== 'none', openState.matDisplay);
 await evalJs('document.getElementById("btnSideToggle").click()');
 await sleep(500);
 check('再点一次能收起',
   await evalJs('!document.getElementById("btnSideToggle").parentElement.classList.contains("prep-open")'));
+check('收起后动作块回到 ▴',
+  (await evalJs(`(getComputedStyle(document.querySelector('#sideToggleArrow i'),'::before').content||'').replace(/^["']|["']$/g,'')`)) === '▴');
+check('收起后副标题报材料字数（收起时看不见输入框，这是唯一线索）',
+  /材料 \d+ 字/.test(await evalJs('document.getElementById("sideToggleHint").textContent')),
+  await evalJs('document.getElementById("sideToggleHint").textContent'));
 
 await send('Emulation.setDeviceMetricsOverride',
   { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);

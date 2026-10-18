@@ -30,8 +30,18 @@ Thumbs.db
 .vscode/
 .idea/
 
-# 临时语法检查产物
+# 临时语法检查产物。
+# ⚠️ 这些是「提取 index.html 里的 script 拿 node --check 过一遍」时的副产物，
+# 一分钟就换一份，没有任何保留价值。曾经把 .run/_idx_check.mjs（1600 多行）
+# 跟着一次提交带进了仓库，之后每次跑语法检查都显示「工作区有改动」，很误导。
 .run/_check.js
+.run/_check.mjs
+.run/_idx_check.mjs
+.run/_*.mjs
+.run/_*.cjs
+
+# 排查时抓的会话日志 / 解包中间文件（可能几十 MB，且含对话内容）
+.run/_session.jsonl
 
 # 测试用音频：由 .run/make_tts.ps1 用 Windows 自带语音合成现场生成。
 # 一个 300KB 的二进制进公开仓库不划算，一条命令就能重造。

@@ -129,6 +129,11 @@
     border-bottom:1px solid var(--line);
   }
   .modal-head h2{font-size:13px; margin:0; flex:1; font-weight:600}
+  /* 弹层右上角那个「关闭」是整块弹层唯一的可见出口（另一条路是点遮罩，
+     但没人知道能点）。button.mini 的默认值只有 padding:1px 7px / 11px 字，
+     实测 38×19px——在桌面上靠鼠标也偏小，手机上更按不准（手机另有 36px 的规则）。
+     这里把基线抬到 32px，别再指望媒体查询兜底。 */
+  .modal-head .mini{min-height:32px; padding:6px 12px; font-size:12px}
   .modal-foot{padding:8px 12px; border-top:1px solid var(--line); display:flex; gap:8px; align-items:center}
   .hist-item{padding:9px 12px; border-bottom:1px solid var(--line); cursor:pointer}
   .hist-item:hover{background:var(--panel2)}
@@ -333,20 +338,63 @@
     font-size:17px; line-height:1; border-radius:8px}
 
   /* 「准备区」（材料/回放/设置）的折叠把手。桌面端永远不显示——
-     桌面上一整条侧栏就在左边，不需要"展开"。 */
+     桌面上一整条侧栏就在左边，不需要"展开"。
+
+     ★ 这一版重做的是"看得出是能点的、看得出收起在哪"：
+       改之前它就是一条 40px 高、深灰底、12.5px 小字的横杠，长得像一段
+       页脚说明而不是按钮。实测用户的原话是「收起准备区按钮不明显」，
+       而且更要命的是——展开之后这条把手**夹在中间**（「说话」那一段带
+       order:-1 排到了它前面），人展开抽屉想收回去，得先在一屏内容里
+       往下找那条灰杠。
+       现在：① 顶部一条抓手（sheet 的通用语义，手机上人人认得）；
+             ② 图标 + 主标题 + 副标题，副标题顺带把"材料备了多少字"说出来，
+                不用展开就知道材料是不是空的；
+             ③ 右侧一个 40px 的圆形动作块：收起时是「▴」，展开后变成「✕」，
+                而且展开时整条把手 sticky 在抽屉顶部，永远够得到。 */
   .side-toggle{
-    display:none; width:100%; align-items:center; gap:8px;
-    background:var(--panel2); border:none; border-bottom:1px solid var(--line);
-    border-radius:0; padding:11px 12px; font-size:12.5px; color:var(--dim);
-    cursor:pointer; text-align:left;
+    display:none; /* 桌面端由下面的 @media 打开 */
+    position:relative; width:100%; align-items:center; gap:10px;
+    text-align:left; cursor:pointer; font-family:inherit;
+    padding:13px 12px 11px;
+    background:linear-gradient(180deg, #212734, #191d26);
+    border:none; border-top:1px solid #333a47; border-bottom:1px solid var(--line);
+    border-radius:0;
   }
-  .side-toggle:hover{background:#262b36}
-  .side-toggle span:first-child{flex:1}
-  .side-toggle-arrow{font-size:10px; color:var(--dim2); transition:transform .15s}
-  .side.prep-open .side-toggle-arrow{transform:rotate(180deg)}
-  .side-toggle .dot{
-    width:6px; height:6px; border-radius:50%; background:var(--ok); flex:0 0 auto;
+  .side-toggle:hover{background:linear-gradient(180deg, #262d3c, #1d222c)}
+  .side-toggle:active{background:linear-gradient(180deg, #1c2230, #171b23)}
+  /* 抓手条：从"这看起来像页脚"变成"这明显是一张可以拉起来的抽屉" */
+  .st-grip{
+    position:absolute; left:50%; top:5px; transform:translateX(-50%);
+    width:40px; height:4px; border-radius:2px; background:#3a4150;
   }
+  .st-ic{
+    flex:0 0 auto; width:30px; height:30px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; line-height:1;
+    background:var(--accent-soft); border:1px solid #2f4a6a; color:var(--accent);
+  }
+  .st-txt{flex:1; min-width:0; display:flex; flex-direction:column; gap:1px}
+  .st-name{font-size:13.5px; font-weight:600; color:var(--text);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .st-hint{font-size:11px; color:var(--dim2); line-height:1.35;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  /* 右边那个动作块。收起时是「▴」（拉起来），展开后变「✕」（收回去）。 */
+  .st-x{
+    flex:0 0 auto; width:40px; height:40px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; line-height:1; color:var(--dim);
+    background:var(--panel2); border:1px solid var(--line);
+    transition:color .12s, border-color .12s;
+  }
+  /* 展开后这个圆块从「▴」变成「✕」：同一块、换一个字形，不换 DOM 结构。
+     ★ 字形必须用 CSS 的 ::before content 换，不能同时用 JS 改 textContent——
+       两边各写一份就会出现「一处改了、另一处没改」的错位（实测过一次：
+       图标已经是 ✕，动作块还是 ▴，看着像"能拉开但不能收起"）。
+       所以 <i> 标签里不放字，什么都不写，字形全归下面两条规则管。 */
+  .st-x i{display:block; font-style:normal}
+  .st-x i::before{content:'▴'}
+  .side.prep-open .st-x i::before{content:'✕'}
+  .side-toggle:hover .st-x{color:var(--text); border-color:#4a5261}
 
   /* ══ 手机端 ══════════════════════════════════════════════════════
      这一段是重写的。原来只有一条 @media(max-width:900px)，把侧栏压成
@@ -498,6 +546,26 @@
     }
     .side.prep-open > *{position:relative; z-index:1}
     .side.prep-open > section{display:flex}
+    /* ★ 展开后把手必须**钉在抽屉顶部**（sticky），否则它会被「说话」那一段
+       抢到下面去（#micSec 是 order:-1），人想收回去得先在一屏内容里找到那条杠。
+       实测（.run/probe_prep_open.mjs）改之前把手在 y=674，抽屉从 420 铺到 844，
+       也就是"关"的按钮落在整屏最下面、还贴着 iPhone 的 Home 条。
+       现在 sticky + z-index 提上来，滚到哪儿都在。
+       top:0 是相对滚动容器 .side.prep-open 算的，正好贴在抽屉上沿。 */
+    /* ★ 展开后把手必须排到最前面（order:-2 比 #micSec 的 -1 还前），
+       否则它会被「说话」那一段顶到下面去——实测（.run/probe_help_prep.mjs）
+       改之前把手在 y=535，而「开始说话」在 y=340，也就是人展开抽屉想收回去，
+       得先看完整块说话区才够得到那条杠。
+       配上 position:sticky top:0，滚到哪儿它都贴在抽屉顶沿。 */
+    .side.prep-open .side-toggle{
+      order:-2;
+      position:sticky; top:0; z-index:2;
+      border-radius:12px 12px 0 0;
+      box-shadow:0 6px 16px rgba(0,0,0,.35);
+    }
+    /* 展开态的动作块本来就是「✕」，这里不用再转角度了——
+       靠 syncSideToggle() 换字。留这条注释是怕以后有人又加个 rotate，
+       两处一起改就会出现「✕ 转了 45° 变成 ✳」这种怪东西。 */
     /* 抽屉里每一段都不许被压扁：内容多少就多高，整条抽屉自己滚。
        这是这次「展开还是有问题」的正解——压扁是 flex 分配空间的锅，
        干脆让所有 section 都 flex-shrink:0。
@@ -550,6 +618,9 @@
     .modal-box{width:100%; max-height:92vh; border-radius:12px}
     .modal-head{padding:9px 10px}
     .modal-head h2{font-size:12.5px}
+    /* 弹层右上角那个「关闭」实测只有 38×19px（.mini 的默认样式）。
+       它是手机弹层里唯一的出口，19px 高基本按不准。 */
+    .modal-head .mini{min-height:36px; padding:7px 12px; font-size:12.5px}
     .hist-item{padding:9px 10px}
     .hist-item .acts button{padding:7px 10px; font-size:12px}
     /* 历史项里的操作按钮在手机上要够大 */
@@ -612,7 +683,23 @@
   }
   #lobby.hide{display:none}
   .lobby-box{width:min(680px, 100%); padding:8px 0 0}
-  .lobby-title{font-size:19px; font-weight:650; margin:0 0 4px}  .lobby-sub{font-size:12px; color:var(--vague); margin:0 0 16px; line-height:1.6}
+  /* ── 大厅顶部：标题 + 「怎么用」 ──
+     这里原来摊着两段说明（「每个人各开一台设备…」「面试官可以有多个…」），
+     手机上被 @media 直接藏掉、桌面上也从来没人读——而大厅最该一眼看到的是
+     「有哪几间房」。说明整段搬进「怎么用」弹层，标题行右边只留一个问号。
+     问号做成 40px 圆形：大厅是手机上的第一个屏幕，手指比鼠标多。 */
+  .lobby-head{display:flex; align-items:flex-start; gap:10px; margin:0 0 14px}
+  .lobby-head .lh-txt{flex:1; min-width:0}
+  .lobby-title{font-size:19px; font-weight:650; margin:0}
+  .lobby-sub{font-size:12px; color:var(--vague); margin:3px 0 0; line-height:1.6}
+  .helpbtn{
+    flex:0 0 auto; width:40px; height:40px; padding:0; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px; font-weight:600; color:var(--dim); font-family:inherit;
+    background:var(--panel); border:1px solid var(--line); cursor:pointer;
+    transition:border-color .12s, color .12s, background .12s;
+  }
+  .helpbtn:hover{border-color:var(--accent); color:var(--text); background:var(--panel2)}
   /* 房间卡片：一眼看出「哪间的面试者已经有人了」。
      候选人席位被占的卡片整体压暗 + 那个标签变黄，比在别处写句提示有效得多。 */
   .room{
@@ -666,11 +753,34 @@
     color:var(--text); font-weight:600;
   }
   .lobby-role-hint{font-size:11.5px; color:var(--vague); margin:0 0 14px; line-height:1.5; min-height:17px}
-  .lobby-tip{
-    font-size:11.5px; color:var(--vague); line-height:1.65;
-    border-top:1px solid var(--line); margin-top:16px; padding-top:12px;
+  /* ── 「怎么用」弹层 ──
+     内容是原来摊在大厅底部的那几段（候选人/面试官各开一台、麦克风要 https、
+     没人的房间会关），加上「席位被占了怎么办」。收进弹层不是为了省地方，
+     是因为摊在底部的说明**没人读**——手机媒体查询里它干脆是 display:none，
+     等于那三条规矩在手机上从来没存在过。 */
+  .help-sec{margin:0 0 14px}
+  .help-sec:last-child{margin-bottom:0}
+  .help-sec h3{
+    font-size:12.5px; margin:0 0 6px; color:var(--text); font-weight:650;
+    display:flex; align-items:center; gap:7px;
   }
-  .lobby-tip b{color:var(--dim)}
+  .help-sec h3 .n{
+    flex:0 0 auto; width:17px; height:17px; border-radius:50%;
+    background:var(--accent-soft); border:1px solid #2f4a6a; color:var(--accent);
+    font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center;
+  }
+  .help-sec p{margin:0 0 5px; font-size:12.5px; line-height:1.7; color:var(--dim)}
+  .help-sec p:last-child{margin-bottom:0}
+  .help-sec b{color:var(--text); font-weight:650}
+  .help-sec code{
+    font:11.5px ui-monospace,Consolas,monospace; color:var(--accent);
+    background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:0 4px;
+  }
+  .help-body{padding:14px 14px 16px; overflow-y:auto; -webkit-overflow-scrolling:touch}
+  @media(max-width:560px){
+    .help-body{padding:12px 12px 18px}
+    .help-sec p{font-size:12.5px}
+  }
   /* 屏幕太矮时（横屏手机）把标题压小，别让列表被挤到看不见 */
   @media(max-height:560px){
     .lobby-title{font-size:16px}
@@ -686,8 +796,11 @@
   @media(max-width:560px){
     #lobby{align-items:stretch; padding-bottom:0}
     .lobby-box{display:flex; flex-direction:column; padding:0; height:100%}
-    /* 头两块（标题、说明、角色选择）不滚：进去就要能确认自己是谁 */
-    .lobby-title, .lobby-sub, .lobby-role, .lobby-role-hint{flex:0 0 auto}
+    /* 头两块（标题行、角色选择）不滚：进去就要能确认自己是谁。
+       ★ 用 .lobby-head 整块（标题+副题+问号）不滚，而不是分别列
+         .lobby-title / .lobby-sub —— 它们现在装在 .lobby-head 里，
+         对子元素设 flex 管不到外面的容器。 */
+    .lobby-head, .lobby-role, .lobby-role-hint{flex:0 0 auto}
     #lobbyList{
       flex:1 1 auto; min-height:0; overflow-y:auto;
       -webkit-overflow-scrolling:touch;
@@ -703,8 +816,9 @@
       background:linear-gradient(180deg, transparent, var(--bg) 26%);
     }
     /* 手机上一整块说明文字占 89–108px，且它在最底部从来没人滚下去看。
-       收成一行，只在手机上：桌面屏幕高，摊开无所谓。 */
-    .lobby-tip{display:none}
+       ★ 现在整块说明都搬进「怎么用」弹层了（标题行右边那个 ? 按钮），
+         大厅里不再有 .lobby-tip —— 两条规矩（各开一台、席位被占）在手机上
+         从此是点得到、看得见的，而不是被藏掉的一段死文字。 */
   }
 </style>
 </head>
@@ -712,11 +826,17 @@
 
 <div id="lobby">
   <div class="lobby-box">
-    <h1 class="lobby-title">选一间面试间</h1>
-    <p class="lobby-sub">
-      每场面试是一间房。候选人只能有一位，面试官可以有多个。<br>
-      没人在的房间会自己关掉，不会一直占着。
-    </p>
+    <div class="lobby-head">
+      <div class="lh-txt">
+        <h1 class="lobby-title">选一间面试间</h1>
+        <p class="lobby-sub">每场面试是一间房。面试者只能有一位，面试官可以有多个。</p>
+      </div>
+      <!-- 「怎么用」：原来底部那三段说明搬进弹层。
+           为什么做成按钮而不是继续摊在下面——摊着的那三段在手机上是
+           display:none（被媒体查询藏掉），等于从来没告诉过手机用户
+           「两个人各开一台设备」。收进弹层之后在两个端上都点得到。 -->
+      <button id="btnHelp" class="helpbtn" title="怎么用：两个人怎么配合、麦克风要怎么开" aria-label="怎么用">?</button>
+    </div>
     <!-- 先进哪一间之前，得先说清「你是谁」。
          服务端在进门那一刻就要锁候选人席位，所以这个选择必须在大厅做完——
          不能等到进去再点「开始说话」，那时候第二个人已经进来了。 -->
@@ -733,11 +853,42 @@
         placeholder="开一间新的，给它起个名字（比如：云联 · 一面）">
       <button id="lobbyNewGo" class="primary">开一间</button>
     </div>
-    <div class="lobby-tip">
-      <b>面试者和面试官</b>各开一台设备，扫同一个码，进<b>同一间</b>房。<br>
-      候选人只能有一位：第二台设备再选「面试者」会被挡在门口，
-      这时把它的角色改成面试官即可。<br>
-      麦克风需要 <b>https</b> 或 <b>本机地址</b> 才能用（手机走隧道地址就是 https）。
+  </div>
+</div>
+
+<!-- 怎么用：从大厅底部搬进来的说明。
+     原来它是大厅里三段摊开的文字（各开一台设备 / 席位被占怎么办 / 麦克风要 https），
+     手机媒体查询把它整个藏了——最需要看到这三条的就是手机用户。
+     现在收进一个弹层，两个端上都点得到，而且大厅第一屏只剩「有哪几间房」。 -->
+<div id="helpWrap" class="modal" style="display:none">
+  <div class="modal-box" style="width:min(520px,100%)">
+    <div class="modal-head">
+      <h2>怎么用</h2>
+      <button id="btnHelpClose" class="mini">关闭</button>
+    </div>
+    <div class="help-body">
+      <div class="help-sec">
+        <h3><span class="n">1</span>两个人怎么配合</h3>
+        <p><b>面试者</b>和<b>面试官</b>各开一台设备，扫同一个码，进<b>同一间</b>房。</p>
+        <p>面试者只能有一位：第二台设备再选「面试者」会被挡在门口，
+           它会问你要不要改成面试官进去。</p>
+        <p><b>面试官可以有好几个</b>，每人一条音轨，互不干扰——不用谁抢谁的麦克风，
+           也不用在面试进行中切来切去。</p>
+      </div>
+      <div class="help-sec">
+        <h3><span class="n">2</span>麦克风要怎么开</h3>
+        <p>手机必须用 <b>https</b> 打开才有麦克风权限（走隧道地址就是 https）。
+           电脑上 <code>localhost</code> 可以，<code>http://192.168.x.x</code> 不行，而且浏览器不会报错，只是不给。</p>
+        <p>点「开始说话」后浏览器会弹一次权限，允许一下。切到别的 App 再回来，
+           麦克风常常已经哑了——页面会自动重连，看着不对就再点一次。</p>
+        <p>没有麦克风、或者想先试功能，用「模拟回放」把要说的话粘进去。</p>
+      </div>
+      <div class="help-sec">
+        <h3><span class="n">3</span>房间和记录</h3>
+        <p>没人在的房间会自己关掉（<b>记录一个字都不删</b>），不会一直占着列表。</p>
+        <p>材料、对话、出过的题都存着。点右上角的<b>房间名</b>回大厅换一间；
+           点「历史面试」翻以前面过的那几场。</p>
+      </div>
     </div>
   </div>
 </div>
@@ -817,9 +968,18 @@
     <!-- 手机上侧栏默认是收起的（只露这一条）。
          面试进行中不需要看到材料框——那是面试前的准备动作。
          这条同时是「展开/收起」的把手，桌面端不显示。 -->
+    <!-- 折叠把手。★ 结构变了就得留三个"看得懂"的东西：
+         抓手条（拽一下的语义）、图标+标题（这是哪一块）、副标题（里面有什么）。
+         副标题由 updateSideHint() 填，会带上材料字数——收起状态下也能知道
+         材料备了没有，不用展开再展开。 -->
     <button id="btnSideToggle" class="side-toggle">
-      <span id="sideToggleLabel">准备区（材料 / 回放 / 设置）</span>
-      <span class="side-toggle-arrow" id="sideArrow">▾</span>
+      <span class="st-grip"></span>
+      <span class="st-ic" id="sideToggleIcon">▤</span>
+      <span class="st-txt">
+        <span class="st-name" id="sideToggleLabel">准备区</span>
+        <span class="st-hint" id="sideToggleHint">材料 · 回放 · 设置</span>
+      </span>
+      <span class="st-x" id="sideToggleArrow"><i></i></span>
     </button>
     <!-- 关键：材料区可以「长大」，但不能被「压扁」。
          它原来是 flex:1 1 auto，是 flex 列里唯一的可伸缩项；高度不够时会被
@@ -1847,24 +2007,80 @@ $('hdActs').addEventListener('click', e => {
 /* ── 手机上的「准备区」折叠 ──
    默认收起，只露一条把手。这不是为了好看：360x640 上材料区独占 236px，
    「开始说话」会被顶到 top=648（屏幕外），而它才是主路径按钮。
-   收起之后一进页面就看到「开始说话」+「下一个问题」，跟产品名对得上。 */
+   收起之后一进页面就看到「开始说话」+「下一个问题」，跟产品名对得上。
+
+   ★ 收起/展开时这套文案必须同步换，否则「▤ 准备区 / 材料 · 回放 · 设置」
+     展开后仍显示「准备区」，人会以为没点开。 */
+function syncSideToggle(){
+  const open = $('btnSideToggle').parentElement.classList.contains('prep-open');
+  $('sideToggleIcon').textContent = open ? '✕' : '▤';
+  $('sideToggleLabel').textContent = open ? '收起准备区' : '准备区';
+  $('sideToggleHint').textContent = open
+    ? '点这里回到题目'
+    : sideHintText();
+  $('btnSideToggle').title = open
+    ? '收起准备区，回到题目'
+    : '展开准备区：材料、模拟回放、模型设置';
+  $('sideToggleArrow').setAttribute('aria-label', open ? '收起' : '展开');
+}
+
+/* 收起状态下把"里面有什么"说清楚：材料备了多少字是最有用的一条，
+   因为「材料忘了粘」是出题变笨的头号原因，而收起状态下看不到那个框。 */
+function sideHintText(){
+  const n = ($('materials').value || '').trim().length;
+  const parts = n ? [`材料 ${n} 字`] : ['材料 0 字'];
+  if(!n) parts.push('没粘材料出题会变笨');
+  if($('replaySec').style.display !== 'none') parts.push('模拟回放开着');
+  parts.push('回放', '设置');
+  return parts.join(' · ');
+}
+function updateSideHint(){
+  if(!$('btnSideToggle').parentElement.classList.contains('prep-open')){
+    $('sideToggleHint').textContent = sideHintText();
+  }
+}
+
 $('btnSideToggle').onclick = () => {
-  const open = $('btnSideToggle').parentElement.classList.toggle('prep-open');
-  $('sideToggleLabel').textContent = open
-    ? '收起准备区'
-    : '准备区（材料 / 回放 / 设置）';
+  const side = $('btnSideToggle').parentElement;
+  side.classList.toggle('prep-open');
+  syncSideToggle();
 };
+/* 抽屉铺开之后，点灰色遮罩关掉它。
+   遮罩是 .side.prep-open::before 画的，不是真元素，所以只能在侧栏上接点击、
+   再判断点是不是落在「内容和把手之外」。
+   ★ 手机上找不到关闭按钮是最烦的——这条和「收起准备区」那个 ✕ 是两条退路。 */
+document.querySelector('.side').addEventListener('click', e => {
+  const side = e.currentTarget;
+  if(!side.classList.contains('prep-open')) return;
+  if(e.target.closest('section') || e.target.closest('.side-toggle')) return;
+  side.classList.remove('prep-open');
+  syncSideToggle();
+});
 
 /* ── 交互 ── */
 $('btnReplayOpen').onclick = () => {
   $('replaySec').style.display = 'block';
   $('micSec').style.display = 'none';
   $('replayText').focus();
+  updateSideHint();
 };
 $('btnReplayClose').onclick = () => {
   $('replaySec').style.display = 'none';
   $('micSec').style.display = 'block';
+  updateSideHint();
 };
+
+/* ── 「怎么用」弹层 ──
+   原来这些说明摊在大厅底部，手机媒体查询把它整个 display:none 掉了——
+   而「两个人各开一台设备」「席位被占了改成面试官」正是手机用户最需要的两条。
+   现在收进弹层，两个端都点得到。 */
+function helpShow(){ $('helpWrap').style.display = 'flex'; }
+function helpHide(){ $('helpWrap').style.display = 'none'; }
+$('btnHelp').onclick = helpShow;
+$('btnHelpClose').onclick = helpHide;
+/* 点弹层外面关掉。判断的是"点到的就是遮罩本身"，
+   不是 closest——里面点任何一处都会冒泡到遮罩，用它会把刚打开就关掉。 */
+$('helpWrap').onclick = e => { if(e.target === $('helpWrap')) helpHide(); };
 
 $('btnSaveMat').onclick = async () => {
   const text = $('materials').value;
@@ -1897,6 +2113,7 @@ $('btnSaveMat').onclick = async () => {
 
 $('materials').addEventListener('input', e => {
   $('matStat').textContent = e.target.value.length + ' 字';
+  updateSideHint();   // 把手上的「材料 N 字」跟着走，收起时也看得见
 });
 
 /* ── 上传文件，在浏览器里把文件变成纯文本 ──
@@ -2893,6 +3110,7 @@ document.querySelectorAll('[data-lobby-role]').forEach(el => {
 (async () => {
   syncMicUI();
   syncLobbyRole();
+  syncSideToggle();     // 把手文案要和"默认收起"这个初始状态一致
 
   const initial = new URLSearchParams(location.search).get('s');
   if(initial && initial !== 'default'){
