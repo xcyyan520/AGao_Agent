@@ -66,6 +66,7 @@ await shot('flow_1_lobby.png');
 const title = '流程 · ' + Date.now().toString().slice(-5);
 await ev(`(()=>{const i=document.getElementById('lobbyNewTitle'); i.value=${JSON.stringify(title)}; document.getElementById('lobbyNewGo').click();})()`);
 await sleep(2500);
+const madeRoomId = await ev(`new URL(location.href).searchParams.get('s')`);
 const inRoom = await ev(`document.getElementById('lobby').classList.contains('hide')`);
 const hdr = await ev(`document.getElementById('btnRoom').textContent.trim()`);
 if (inRoom && hdr === title) ok('开一间后直接进房，页头显示名字', hdr);
@@ -104,5 +105,16 @@ if (histHas) ok('历史面板能打开'); else bad('历史面板打不开');
 console.log('\n' + R.join('\n'));
 const uniq = [...new Set(errs)].filter(Boolean);
 console.log(uniq.length ? '\n控制台错误:\n' + uniq.slice(0, 8).join('\n') : '\n控制台干净');
+
+/* ★ 收尾：把这一趟造出来的房间从库里删掉。
+   少了这一步，每跑一次大厅就多一张「流程 · 18265」——跑十次之后用户打开
+   大厅看到的全是探针垃圾，会以为页面坏了（真发生过，手工清了一次）。
+   大厅按 updated_at 排序、只取前 24 条，垃圾足够多时**真的房间会被挤出去**。 */
+if (madeRoomId) {
+  const del = await ev(`fetch('/api/sessions/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: ${JSON.stringify(madeRoomId)} })}).then(r=>r.json()).then(j=>j.ok).catch(()=>false)`);
+  console.log(del ? `\n已清掉这次造的房间 ${madeRoomId}` : `\n⚠ 没清掉 ${madeRoomId}，请手动删`);
+}
+
 ws.close(); ch.kill(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch {}
 process.exit(0);

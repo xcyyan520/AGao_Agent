@@ -48,16 +48,18 @@ const t0 = '改名前 · ' + Date.now().toString().slice(-5);
 await cmd('Page.navigate', { url: BASE + '/' }, sessionId); await sleep(2200);
 await ev(`(()=>{const i=document.getElementById('lobbyNewTitle'); i.value=${JSON.stringify(t0)}; document.getElementById('lobbyNewGo').click();})()`);
 await sleep(2500);
+/* 记住这一趟自己开的那间。后面一律用它，不再用 `items[0]` 猜——
+   列表按 updated_at 排，改名本身就会把它顶到第一条，看起来能用，
+   但只要中间有别人（或别的探针）动过库，`items[0]` 就换成别人的房间，
+   探针会去改用户的真实面试。最后也要按这个 id 删干净。 */
+const madeRoomId = await ev(`new URL(location.href).searchParams.get('s')`);
 ok('进房后页头名', await ev(`document.getElementById('btnRoom').textContent.trim()`));
 
 // 用真正的 UI 路径改名（prompt 用 stubbed 值，模拟人输入）
 const t1 = '改名后 · ' + Date.now().toString().slice(-5);
 await ev(`window.prompt = () => ${JSON.stringify(t1)}`);
 await ev(`(async () => {
-  const j = await (await fetch('/api/sessions?limit=1')).json();
-  const cur = j.items[0].id;
-  // 走页面里那个函数，和点「起名」按钮走的是同一段代码
-  await renameSession(cur, ${JSON.stringify(t0)}, null);
+  await renameSession(${JSON.stringify(madeRoomId)}, ${JSON.stringify(t0)}, null);
 })()`);
 await sleep(1200);
 
@@ -75,13 +77,9 @@ const card = await ev(`(() => {
 if (card) ok('大厅卡片跟着变', card.slice(0, 50)); else bad('大厅卡片还是旧名字');
 
 // 清掉名字 → 页头要退回「未命名面试」，不能停留在旧值
-const j2 = await ev(`(async () => {
-  const j = await (await fetch('/api/sessions?limit=1')).json();
-  return j.items[0].id;
-})()`);
-await cmd('Page.navigate', { url: BASE + '/?s=' + j2 }, sessionId); await sleep(2200);
+await cmd('Page.navigate', { url: BASE + '/?s=' + madeRoomId }, sessionId); await sleep(2200);
 await ev(`window.prompt = () => ''`);
-await ev(`renameSession(${JSON.stringify(j2)}, ${JSON.stringify(t1)}, null)`);
+await ev(`renameSession(${JSON.stringify(madeRoomId)}, ${JSON.stringify(t1)}, null)`);
 await sleep(1000);
 const hdr2 = await ev(`document.getElementById('btnRoom').textContent.trim()`);
 if (hdr2 === '未命名面试') ok('清空名字后页头退回「未命名面试」', hdr2);
@@ -90,5 +88,15 @@ else bad('清空名字后页头不对', hdr2);
 console.log('\n' + R.join('\n'));
 const uniq = [...new Set(errs)].filter(Boolean);
 console.log(uniq.length ? '\n控制台异常:\n' + uniq.slice(0, 6).join('\n') : '\n控制台无异常');
+
+/* 收尾：删掉这一趟开的房间。不删的话大厅里会慢慢堆满
+   「改名后 · 29755」这种卡片，而且大厅只取前 24 条——垃圾够多时
+   用户真实的房间会被挤出去，看起来像「我的面试丢了」。 */
+if (madeRoomId) {
+  const del = await ev(`fetch('/api/sessions/delete',{method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ id: ${JSON.stringify(madeRoomId)} })}).then(r=>r.json()).then(j=>j.ok).catch(()=>false)`);
+  console.log(del ? `已清掉这次造的房间 ${madeRoomId}` : `⚠ 没清掉 ${madeRoomId}，请手动删`);
+}
+
 ws.close(); ch.kill(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch {}
 process.exit(0);

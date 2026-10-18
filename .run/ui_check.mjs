@@ -407,6 +407,12 @@ await sleep(400);
 console.log('\n═══ 麦克风（假麦克风设备喂一段语音）═══');
 
 const MIC_WAV = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tts_test.wav');
+/* 麦克风这一场要留到收尾一起删（TEST_SESSION / HIST_SESSION / RESET_PROBE
+   都在模块顶层，收尾那段在同一个作用域里）。
+   ★ 必须在这里就声明成 null，不能像以前那样在下面 else 块里 `const`——
+   块级作用域的东西收尾时访问不到，会直接 ReferenceError 崩掉整个脚本，
+   连前面 100 多项断言的结果都打不出来（真踩过）。 */
+let MIC_SESSION = null;
 if (!fs.existsSync(MIC_WAV)) {
   check('找得到测试语音 tts_test.wav', false, '先生成：见文档「语音」一节的 ffmpeg / SAPI 命令');
 } else {
@@ -473,7 +479,7 @@ if (!fs.existsSync(MIC_WAV)) {
       return r.result?.result?.value;
     };
 
-    const MIC_SESSION = 'uimic_' + Date.now();
+    MIC_SESSION = 'uimic_' + Date.now();
     await send2('Page.navigate', { url: `${APP}/?s=${MIC_SESSION}` }, s2);
     await sleep(1500);
 
@@ -1001,21 +1007,21 @@ await evalJs('document.getElementById("btnHistClose").click()');
 await sleep(300);
 
 /* 收尾：把本段造出来的场次从库里删掉，别在用户的历史里越积越多。
-   删两场：HIST_SESSION（材料库那段造的）和刚开出来的新场。
-   旧场（原来的 SESSION）不是这脚本造的，不动它。 */
-for (const sid of [HIST_SESSION, afterReset.session, RESET_PROBE].filter(Boolean)) {
+   要删的是**这个脚本自己造的每一场**：
+     TEST_SESSION（首屏那场，出过题、落过对话）
+     MIC_SESSION（假麦克风那场，进程中间已单独删过，这里再删一次无妨）
+     HIST_SESSION（材料库那段造的）
+     RESET_PROBE（开新一场那段造的）
+     afterReset.session（从界面点出来的新房）
+   ★ 以前漏了 TEST_SESSION，于是每跑一次 ui_check 大厅里就多一间
+   「uibase_1792295239631」这种 id 当名字的房间——大厅只取前 24 条，
+   垃圾够多时用户真实的房间会被挤掉，看起来像数据丢了（真发生过）。 */
+for (const sid of [TEST_SESSION, MIC_SESSION, HIST_SESSION, RESET_PROBE, afterReset.session].filter(Boolean)) {
   await fetch(`${APP}/api/sessions/delete`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: sid }),
   }).catch(() => {});
 }
-
-/* 删掉自己造的那一场，别在用户库越积越多。
-   只 reset 内存不够——材料库和历史面试读的是 SQLite。 */
-await fetch(`${APP}/api/sessions/delete`, {
-  method: 'POST', headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ id: HIST_SESSION }),
-}).catch(() => {});
 
 const failed = results.filter(r => !r.pass);
 console.log('\n' + '─'.repeat(60));

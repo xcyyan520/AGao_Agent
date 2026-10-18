@@ -242,6 +242,14 @@ try {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session: SESSION }),
   });
+  /* reset 只放掉内存，库里那一行还在——不删的话大厅和历史里会一直多一间
+     `twodev_1792290…`（id 当名字），跑几次就淹掉真实房间。
+     大厅只取前 24 条，垃圾够多时用户自己的面试会被挤出列表。 */
+  await fetch(`${APP}/api/sessions/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: SESSION }),
+  }).catch(() => {});
 } finally {
   await closeDevice(A);
   await closeDevice(B);

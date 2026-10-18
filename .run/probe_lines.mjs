@@ -55,5 +55,13 @@ const ls = await (await fetch(`${BASE}/api/sessions?limit=10`)).json();
 const mine = (ls.items || []).find(x => x.id === S);
 ok('列表里带上了句数', mine && mine.lines === (data.lines || []).length, JSON.stringify(mine));
 
+/* 收尾：删掉这场。不删的话大厅和历史里会多一间 `probe_lines_xxx`
+   （id 当名字），跑几次就淹掉真实房间——大厅只取前 24 条，
+   垃圾够多时用户自己的面试会被挤出列表，看起来像数据丢了。 */
+await fetch(`${BASE}/api/sessions/delete`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ id: S }),
+}).catch(() => {});
+
 console.log(`\n${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);
