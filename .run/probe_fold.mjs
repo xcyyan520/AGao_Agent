@@ -152,10 +152,15 @@ async function snap(label) {
   return d;
 }
 
+/* ★ 房间模式之后不能再拿 `?s=default` 当入口：裸地址和 default 都停在大厅，
+   而 #lobby 是 position:fixed;inset:0;z-index:300，整页盖住——
+   于是这里量到的 elementFromPoint 全是「被大厅盖住」，报一堆假遮挡。
+   改成带自己的一次性 id 直接进房（和 ui_check / probe_help_prep 一致）。 */
+const FOLD_SESSION = 'foldprobe_' + Date.now();
 for (const [w, h] of [[390, 844], [360, 640]]) {
   await send('Emulation.setDeviceMetricsOverride',
     { width: w, height: h, deviceScaleFactor: 1, mobile: true }, sessionId);
-  await send('Page.navigate', { url: `${APP}/?s=default` }, sessionId);
+  await send('Page.navigate', { url: `${APP}/?s=${FOLD_SESSION}` }, sessionId);
   await sleep(2200);
   await snap(`收起 ${w}x${h}`);
   await evalJs(`document.getElementById('btnSideToggle').click()`);
@@ -163,5 +168,22 @@ for (const [w, h] of [[390, 844], [360, 640]]) {
   await snap(`展开 ${w}x${h}`);
 }
 
+/* 收尾自己删掉这场，否则大厅里会积一间 foldprobe_xxx
+   （大厅按 updated_at 排序只取前 24 条，探针跑多了真房间会被挤出去）。 */
+try {
+  await fetch(APP + '/api/sessions/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: FOLD_SESSION })
+  });
+  console.log(`\n已清掉 ${FOLD_SESSION}`);
+} catch (e) { console.log('清房间失败:', e.message); }
+
+/* ★ 顺序有讲究：先关 WebSocket 再杀 chrome 再等待，最后才 exit。
+   以前是 chrome.kill() 紧接 process.exit(0)，libuv 在拆 async handle 时
+   正好撞上退出，Windows 上会打 "Assertion failed: !(handle->flags &
+   UV_HANDLE_CLOSING), file src\win\async.c, line 76" 并以 exit code 1 结束——
+   探针其实全跑完了，但看起来像失败。 */
+try { ws.close(); } catch {}
 chrome.kill();
+await sleep(400);
 process.exit(0);

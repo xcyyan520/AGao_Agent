@@ -69,17 +69,17 @@ await shot('flow_1_lobby.png');
    麦克风要 https）在手机上被媒体查询整段藏掉了，现在收进问号弹层。
    这里只验「点得开、关得掉、三条都在」——具体排版由 probe_help_prep.mjs 量。 */
 const helpOpenable = await ev(`(() => {
-  const b = document.getElementById('btnHelp');
+  const b = document.getElementById('btnHelpLobby');
   if (!b) return { err: '没有问号按钮' };
   const r = b.getBoundingClientRect();
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   return { w: Math.round(r.width), h: Math.round(r.height), hitId: hit && (hit.id || hit.tagName) };
 })()`);
 if (helpOpenable.err) bad(helpOpenable.err);
-else if (helpOpenable.hitId === 'btnHelp') ok('大厅问号点得到', `${helpOpenable.w}×${helpOpenable.h}`);
+else if (helpOpenable.hitId === 'btnHelpLobby') ok('大厅问号点得到', `${helpOpenable.w}×${helpOpenable.h}`);
 else bad('问号被别的东西盖住了', helpOpenable.hitId);
 
-await ev(`document.getElementById('btnHelp').click()`);
+await ev(`document.getElementById('btnHelpLobby').click()`);
 await sleep(300);
 const helpShown = await ev(`(() => {
   const w = document.getElementById('helpWrap');

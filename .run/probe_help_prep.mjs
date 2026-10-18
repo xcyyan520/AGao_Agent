@@ -68,7 +68,7 @@ for (const [w, h] of [[390, 844], [360, 640], [1440, 900]]) {
   await sleep(2600);
 
   const lobby = await ev(`(() => { ${R}
-    const hb = document.getElementById('btnHelp');
+    const hb = document.getElementById('btnHelpLobby');
     const out = { vw:innerWidth, vh:innerHeight, help: r(hb), head: r(document.querySelector('.lobby-head')),
       titleR: r(document.querySelector('.lobby-title')), sub: r(document.querySelector('.lobby-sub')),
       tip: !!document.querySelector('.lobby-tip'), helpShown: getComputedStyle(document.getElementById('helpWrap')).display };
@@ -85,16 +85,19 @@ for (const [w, h] of [[390, 844], [360, 640], [1440, 900]]) {
 
   // 点问号
   const opened = await ev(`(() => { ${R}
-    document.getElementById('btnHelp').click();
+    document.getElementById('btnHelpLobby').click();
     return new Promise(res => setTimeout(() => {
       const w = document.getElementById('helpWrap'), box = w.querySelector('.modal-box');
       const body = w.querySelector('.help-body');
       const secs = [...w.querySelectorAll('.help-sec')].map(s => ({ t: r(s), h3: s.querySelector('h3').textContent.trim(),
         ps: s.querySelectorAll('p').length }));
-      // 正文能不能滚、有没有溢出到屏幕外
-      const bl = w.getBoundingClientRect();
+      // 「溢出」只查横向。纵向不能查：.help-body 是可滚动容器，正文比容器长
+      // 是正常的，里面还没滚到的段落 bottom 当然超过框子 —— 拿它当判据会把
+      // 每一段都报成溢出（实测 360x640 上假报 DIV.help-sec / P / B 共五条）。
+      const bb = box.getBoundingClientRect();
       const over = [...w.querySelectorAll('.help-body *')].filter(e => {
-        const b = e.getBoundingClientRect(); return b.right > innerWidth + 1 || b.bottom > innerHeight + 1;
+        const b = e.getBoundingClientRect();
+        return b.right > bb.right + 1 || b.left < bb.left - 1;
       }).map(e => e.tagName + '.' + (e.className||''));
       res({ disp: getComputedStyle(w).display, box: r(box), body: r(body),
         scrollH: body ? body.scrollHeight : 0, clientH: body ? body.clientHeight : 0,

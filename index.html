@@ -296,6 +296,11 @@
   .micshow:empty{display:none}
   .hint{font-size:11.5px; color:var(--dim2); line-height:1.65; margin-top:8px}
   .hint b{color:var(--dim); font-weight:600}
+  /* 空的提示不占一点空间。
+     #micHint 从「四行常驻说明」改成「只在出错时写字的容器」之后，
+     平时它是空的；不写这条规则的话 margin-top:8px + line-height 仍然会
+     在麦克风下面留一条 8px 的缝，看起来像渲染漏了什么。 */
+  .hint:empty{display:none}
 
   /* ── 谁在听（音轨胶囊） ──
      一行一个胶囊，装不下就换行。多面试官时这一行会变长，
@@ -829,13 +834,17 @@
     <div class="lobby-head">
       <div class="lh-txt">
         <h1 class="lobby-title">选一间面试间</h1>
-        <p class="lobby-sub">每场面试是一间房。面试者只能有一位，面试官可以有多个。</p>
+        <!-- 大厅标题下只留一句「这是什么」，不再解释规则。
+             规则（谁能进、面试官能几个、麦克风怎么开）全部在问号弹层里。 -->
+        <p class="lobby-sub">每场面试是一间房。</p>
       </div>
       <!-- 「怎么用」：原来底部那三段说明搬进弹层。
            为什么做成按钮而不是继续摊在下面——摊着的那三段在手机上是
            display:none（被媒体查询藏掉），等于从来没告诉过手机用户
-           「两个人各开一台设备」。收进弹层之后在两个端上都点得到。 -->
-      <button id="btnHelp" class="helpbtn" title="怎么用：两个人怎么配合、麦克风要怎么开" aria-label="怎么用">?</button>
+           「两个人各开一台设备」。收进弹层之后在两个端上都点得到。
+           ★ id 是 btnHelpLobby 不是 btnHelp：房间内的页头也有一个「? 使用说明」，
+             同一个 id 出现两次，$('btnHelp') 只会拿到先出现的那个。 -->
+      <button id="btnHelpLobby" class="helpbtn" title="怎么用：两个人怎么配合、麦克风要怎么开" aria-label="怎么用">?</button>
     </div>
     <!-- 先进哪一间之前，得先说清「你是谁」。
          服务端在进门那一刻就要锁候选人席位，所以这个选择必须在大厅做完——
@@ -869,11 +878,13 @@
     <div class="help-body">
       <div class="help-sec">
         <h3><span class="n">1</span>两个人怎么配合</h3>
-        <p><b>面试者</b>和<b>面试官</b>各开一台设备，扫同一个码，进<b>同一间</b>房。</p>
+        <p><b>面试者</b>和<b>面试官</b>各开一台设备，扫同一个码，进<b>同一间</b>房。
+           进去后各自点「切换」选好自己是谁，再点「开始说话」——不用在面试进行中切来切去。</p>
+        <p>谁说的话去哪：<b>面试者</b>说的喂给 AI 出题；<b>面试官</b>说的进「你实际问出口的问题」
+           （这样 AI 不会把问过的再问一遍）。</p>
         <p>面试者只能有一位：第二台设备再选「面试者」会被挡在门口，
            它会问你要不要改成面试官进去。</p>
-        <p><b>面试官可以有好几个</b>，每人一条音轨，互不干扰——不用谁抢谁的麦克风，
-           也不用在面试进行中切来切去。</p>
+        <p><b>面试官可以有好几个</b>，每人一条音轨，互不干扰——不用谁抢谁的麦克风。</p>
       </div>
       <div class="help-sec">
         <h3><span class="n">2</span>麦克风要怎么开</h3>
@@ -912,6 +923,11 @@
        每个按钮只有 31px 高（拇指点不准），而「下一个问题」被挤到屏幕中段。
        所以窄屏时收进一个「更多」面板，#btnMore 只在手机上出现。 -->
   <div class="hd-acts" id="hdActs">
+    <!-- 「使用说明」：以前这些字是直接摊在界面上的（大厅底部三段、麦克风下面四行），
+         手机上要么被媒体查询藏掉、要么天天占着 66~116px。
+         现在统一收进这一个弹层——★ 大厅和房间内都能打开，
+         因为面试进行到一半想确认「面试官能不能多开一个」也说得通。 -->
+    <button id="btnHelp" title="怎么用：两个人怎么配合、麦克风怎么开、房间和记录">? 使用说明</button>
     <button id="btnSettings">⚙ 设置</button>
     <button id="btnHist">历史面试</button>
     <button id="btnSummary">导出复盘</button>
@@ -1037,12 +1053,13 @@
            现在把整张表摊开，谁开着麦克风、谁正在说话，一眼能看到。 -->
       <div class="tracks" id="trackList"></div>
       <div class="micshow" id="micShow"></div>
-      <div class="hint" id="micHint">
-        <b>每个人各开一台设备</b>，各自点「切换」选好自己是谁，再点「开始说话」。<br>
-        候选人说的话喂给 AI 出题；面试官说的话进「你实际问出口的问题」。<br>
-        <b>面试官可以有好几个</b>，每人一条音轨，互不干扰——不用谁抢谁的麦克风。<br>
-        第一次点会要麦克风权限，允许一下。
-      </div>
+      <!-- ★ 这里原来摊着四行说明（「每个人各开一台设备…」「面试官可以有好几个…」）。
+           手机上实测占 66~116px、字号 11px，是准备区里最长的一段，而它讲的是
+           「第一次怎么用」——看第二眼就没用了，却每场面试都在占地方。
+           现在这段进了「使用说明」菜单（header 的「? 使用说明」，手机在 ☰ 里）。
+           这个 div 保留，但只给错误信息用（micError() 往里写）：
+           出错时必须有地方说人话，平时它是空的、不占一行（见 #micHint:empty）。 -->
+      <div class="hint" id="micHint"></div>
     </section>
 
     <section id="replaySec" style="display:none">
@@ -2070,17 +2087,27 @@ $('btnReplayClose').onclick = () => {
   updateSideHint();
 };
 
-/* ── 「怎么用」弹层 ──
-   原来这些说明摊在大厅底部，手机媒体查询把它整个 display:none 掉了——
-   而「两个人各开一台设备」「席位被占了改成面试官」正是手机用户最需要的两条。
-   现在收进弹层，两个端都点得到。 */
+/* ── 「使用说明」弹层 ──
+   原来这些说明是直接摊在界面上的两处：大厅底部三段、麦克风下面四行。
+   大厅那三段在手机上被媒体查询整个 display:none 掉（最需要它的就是手机用户），
+   麦克风那四行则天天占着 66~116px，讲的全是「第一次怎么用」。
+   现在统一收进这一个弹层，两个端、两个位置都点得到：
+     - 大厅标题右边的问号（btnHelpLobby）
+     - 页头「更多」里的「? 使用说明」（btnHelp，桌面端在页头）
+   ★ 两个按钮不同 id：同 id 出现两次时 $('btnHelp') 只拿到先出现的那个，
+     房间里那个就永远点不动。 */
 function helpShow(){ $('helpWrap').style.display = 'flex'; }
 function helpHide(){ $('helpWrap').style.display = 'none'; }
-$('btnHelp').onclick = helpShow;
+$('btnHelpLobby').onclick = helpShow;
+$('btnHelp').onclick = helpShow;   // 「更多」菜单点完自己会关（见 hdActs 的 click 监听）
 $('btnHelpClose').onclick = helpHide;
 /* 点弹层外面关掉。判断的是"点到的就是遮罩本身"，
    不是 closest——里面点任何一处都会冒泡到遮罩，用它会把刚打开就关掉。 */
 $('helpWrap').onclick = e => { if(e.target === $('helpWrap')) helpHide(); };
+/* ESC 也能关。手机上没键盘，但桌面端开弹层之后第一反应就是按 Esc。 */
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && $('helpWrap').style.display === 'flex') helpHide();
+});
 
 $('btnSaveMat').onclick = async () => {
   const text = $('materials').value;

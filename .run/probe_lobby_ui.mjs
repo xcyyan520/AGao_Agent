@@ -60,7 +60,9 @@ async function measure(w, h) {
     add('newRow', document.querySelector('.room-new'));
     add('newInput', document.getElementById('lobbyNewTitle'));
     add('newGo',  document.getElementById('lobbyNewGo'));
-    add('tip',    document.querySelector('.lobby-tip'));
+    // .lobby-tip 已经不存在了（搬进「怎么用」弹层），这里改成量那个问号按钮：
+    // 它现在是手机端唯一能看到「两个人怎么配合」的入口，必须够大、点得到。
+    add('helpBtn', document.getElementById('btnHelpLobby'));
     // 横向溢出：谁比视口宽
     const over = [];
     for (const el of document.querySelectorAll('#lobby *')) {
@@ -85,7 +87,7 @@ for (const [w, h] of [[390, 844], [360, 640]]) {
       String(it.h).padStart(4), String(it.w).padStart(4), it.fs.padStart(6), flag, it.txt ? '| ' + it.txt : '');
   }
   if (m.docW > m.vw) console.log(`⚠ 整页横向溢出：docW=${m.docW} > vw=${m.vw} → ${m.over.join(' ')}`);
-  const small = m.items.filter(i => !i.missing && /roleC|roleI|newGo|newInput/.test(i.name) && i.h < 40 && i.h > 0);
+  const small = m.items.filter(i => !i.missing && /roleC|roleI|newGo|newInput|helpBtn/.test(i.name) && i.h < 40 && i.h > 0);
   if (small.length) console.log('⚠ 高度<40px：' + small.map(s => `${s.name}(${s.h})`).join(' '));
 }
 ws.close(); ch.kill(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch {}
