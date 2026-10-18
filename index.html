@@ -10,6 +10,12 @@
     --fg:#e6e9ef; --dim:#8b94a7; --dim2:#5f6779;
     --ok:#3fb950; --err:#f85149; --vague:#d29922; --off:#a371f7; --unc:#58a6ff;
     --accent:#2f81f7;
+    /* 三个后加的别名。大厅那一块 CSS 是照 --text/--line2/--accent-soft
+       写的，但这套调色板早期只有 --fg/--line。名字对不上时 var() 不是
+       报错、是**整条声明作废**：`color:var(--text)` 拿到空值，颜色退回
+       浏览器默认（黑字），在深色底上等于看不见。所以在这里补齐，
+       而不是去把那几十处引用一个个改掉。 */
+    --text:var(--fg); --line2:#3a4150; --accent-soft:rgba(47,129,247,.16);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   /* ★ 三行都是给真机（尤其手机浏览器/微信内置浏览器）打的补丁，
@@ -411,6 +417,14 @@
     .qbar button{padding:12px 14px; font-size:13.5px} /* 34 → 44 */
     #micSec h2 button.mini{min-height:40px; padding:9px 12px; font-size:12.5px}
     #btnRole, #btnReplayOpen{float:none; margin-top:0}
+    /* 房间按钮：20px 高，是整页里唯一还没够到 32px 的东西（实测）。
+       它偏偏是手机上第二常用的按钮——人换房间、回大厅都得点它。
+       单独给宽高而不是调 .pill：别的 pill 是纯展示，点了没反应，
+       做得跟它一样大可点击区域只会更乱。
+       给到 40px 是因为页头本来就被「更多」（44px）撑着 57px，
+       同一个按钮长到 40 不会再撑高页头一像素——白拿的高度。 */
+    #btnRoom{min-height:40px; padding:8px 12px; font-size:12px; max-width:132px;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
     /* ── 对话流：能滚，但至少留两行 ── */
     .feed{padding:10px; gap:8px; min-height:0}
@@ -572,15 +586,176 @@
     transition:opacity .22s, transform .22s;
   }
   #toast.show{opacity:1; transform:translate(-50%, 0)}
+
+  /* 页头那个「房间」胶囊：它是个按钮，但长得和其他 pill 一样，
+     因为它在页面上要表达的是"我现在在哪"，不是"点我能干什么"。
+     只有 hover 时才露出可点的迹象。 */
+  .roompill{cursor:pointer; font-family:inherit; max-width:200px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .roompill:hover{border-color:var(--line2); color:var(--text)}
+
+  /* ══ 大厅（选房间）══════════════════════════════════════════════
+     进来第一屏不是面试界面，而是「你要进哪一间」。
+     用户的原话：「每次都开一个新的房间一样，别人进来可以选择房间进入」。
+
+     ★ 为什么用整屏覆盖而不是一个弹窗：
+       面试官很可能是扫码进来的、在一个完全陌生的上下文里，第一眼必须
+       看到「有哪几间房、谁在里面」，而不是先看到一堆统计数字再去找入口。
+       整屏覆盖同时解决了「没进房间之前不该能点开始说话」这个问题——
+       底下的按钮点不到，不用额外写一堆禁用逻辑。 */
+  #lobby{
+    position:fixed; inset:0; z-index:300;
+    background:radial-gradient(1200px 600px at 50% -10%, #1b2330 0%, var(--bg) 60%);
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:max(18px, env(safe-area-inset-top)) 14px 20px;
+    overflow-y:auto; -webkit-overflow-scrolling:touch;
+  }
+  #lobby.hide{display:none}
+  .lobby-box{width:min(680px, 100%); padding:8px 0 0}
+  .lobby-title{font-size:19px; font-weight:650; margin:0 0 4px}  .lobby-sub{font-size:12px; color:var(--vague); margin:0 0 16px; line-height:1.6}
+  /* 房间卡片：一眼看出「哪间的面试者已经有人了」。
+     候选人席位被占的卡片整体压暗 + 那个标签变黄，比在别处写句提示有效得多。 */
+  .room{
+    display:block; width:100%; text-align:left; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:11px;
+    padding:12px 13px; margin-bottom:9px; color:var(--text); font:inherit;
+    transition:border-color .12s, background .12s;
+  }
+  .room:hover{border-color:var(--line2); background:var(--panel2)}
+  .room:active{transform:scale(.995)}
+  /* 有人的房间左边挂一道绿边：扫一眼就知道"这间现在有人"。
+     比在文字里写「刚才还有人」快得多——文字要读，色块不用。 */
+  .room.live{border-left:3px solid var(--ok); padding-left:11px}
+  .room.unnamed .room-name{color:var(--dim); font-weight:500}
+  .room-name{font-size:14.5px; font-weight:600; margin-bottom:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .room-meta{font-size:11.5px; color:var(--vague); display:flex; flex-wrap:wrap; gap:4px 10px}
+  .room-meta .hot{color:#8fd8a8}
+  .room-meta .taken{color:#e0b062}
+  .room-new{
+    display:flex; gap:8px; margin:14px 0 10px; align-items:stretch;
+  }
+  .room-new input{flex:1; min-width:0}
+  /* 手机上新房名输入框和「开一间」要各占一行、各 44px 高：
+     挤成一行时输入框只剩 289px、按钮 65px，手上点「开一间」很容易点到旁边。
+     ★ 实测（.run/probe_lobby_ui.mjs）第一版只给了按钮 min-height，
+       输入框还是 30px——输入框也是要点的目标，同样得够高。 */
+  @media(max-width:520px){
+    .room-new{flex-wrap:wrap}
+    .room-new input{flex:1 1 100%; min-height:44px; padding:11px 12px; font-size:14px}
+    .room-new button{flex:1 1 100%; min-height:44px}
+  }
+  .room-empty{font-size:12.5px; color:var(--vague); text-align:center; padding:22px 0}
+  /* 大厅里的「我是面试者 / 面试官」。
+     两个按钮做成一样大：这不是主次关系，是二选一。
+     ★ 手机上必须够高（44px）：这是进门前必须点的一次，点不准就进不去。 */
+  .lobby-role{display:flex; align-items:center; gap:8px; margin:0 0 6px}
+  .lobby-role-q{font-size:12.5px; color:var(--vague); flex:none}
+  .lobby-role button{
+    flex:1; min-height:44px; padding:10px 8px; font:inherit; font-size:13px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:9px;
+    color:var(--dim); transition:border-color .12s, color .12s, background .12s;
+  }
+  .lobby-role button:hover{border-color:var(--line2); color:var(--text)}
+  /* 选中的那个用「柔光」而不是全局的实心蓝：
+     两个按钮是二选一，实心蓝会把另一个衬成"不可选"，
+     而这里随时可以改主意。所以只提亮边框和字色。 */
+  .lobby-role button.primary,
+  .lobby-role button.primary:hover:not(:disabled){
+    background:var(--accent-soft); border-color:var(--accent);
+    color:var(--text); font-weight:600;
+  }
+  .lobby-role-hint{font-size:11.5px; color:var(--vague); margin:0 0 14px; line-height:1.5; min-height:17px}
+  .lobby-tip{
+    font-size:11.5px; color:var(--vague); line-height:1.65;
+    border-top:1px solid var(--line); margin-top:16px; padding-top:12px;
+  }
+  .lobby-tip b{color:var(--dim)}
+  /* 屏幕太矮时（横屏手机）把标题压小，别让列表被挤到看不见 */
+  @media(max-height:560px){
+    .lobby-title{font-size:16px}
+    .lobby-sub{display:none}
+  }
+  /* ★ 手机上「开一间新的」必须钉在底部，不能排在列表后面。
+     实测（.run/probe_lobby_ui.mjs，390x844，9 间房）：
+       列表从 196px 一直铺到 944px，而「开一间」那一行在 958–1040px，
+       整整一屏之外——一个想开新面试的人，进门看到九张卡片和整整一屏空白，
+       会以为「这里只能选，不能建」。而建新的才是最常见的动作。
+     做法：整块从流里拿出来钉住，列表自己滚。
+     底部留 env(safe-area-inset-bottom)，否则 iPhone 的手势条会压住按钮。 */
+  @media(max-width:560px){
+    #lobby{align-items:stretch; padding-bottom:0}
+    .lobby-box{display:flex; flex-direction:column; padding:0; height:100%}
+    /* 头两块（标题、说明、角色选择）不滚：进去就要能确认自己是谁 */
+    .lobby-title, .lobby-sub, .lobby-role, .lobby-role-hint{flex:0 0 auto}
+    #lobbyList{
+      flex:1 1 auto; min-height:0; overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+      /* 列表底部留白，最后一张卡片不要贴着固定区域 */
+      padding-bottom:6px;
+      /* 滚动时别把整页一起带着滚 */
+      overscroll-behavior:contain;
+    }
+    .room-new{
+      flex:0 0 auto; margin:10px 0 0; padding:10px 0 0;
+      border-top:1px solid var(--line);
+      padding-bottom:calc(10px + env(safe-area-inset-bottom));
+      background:linear-gradient(180deg, transparent, var(--bg) 26%);
+    }
+    /* 手机上一整块说明文字占 89–108px，且它在最底部从来没人滚下去看。
+       收成一行，只在手机上：桌面屏幕高，摊开无所谓。 */
+    .lobby-tip{display:none}
+  }
 </style>
 </head>
 <body>
 
+<div id="lobby">
+  <div class="lobby-box">
+    <h1 class="lobby-title">选一间面试间</h1>
+    <p class="lobby-sub">
+      每场面试是一间房。候选人只能有一位，面试官可以有多个。<br>
+      没人在的房间会自己关掉，不会一直占着。
+    </p>
+    <!-- 先进哪一间之前，得先说清「你是谁」。
+         服务端在进门那一刻就要锁候选人席位，所以这个选择必须在大厅做完——
+         不能等到进去再点「开始说话」，那时候第二个人已经进来了。 -->
+    <div class="lobby-role">
+      <span class="lobby-role-q">我是</span>
+      <button data-lobby-role="candidate">面试者</button>
+      <button data-lobby-role="interviewer">面试官</button>
+    </div>
+    <div class="lobby-role-hint" id="lobbyRoleHint"></div>
+
+    <div id="lobbyList"><div class="room-empty">加载中…</div></div>
+    <div class="room-new">
+      <input type="text" id="lobbyNewTitle" maxlength="80"
+        placeholder="开一间新的，给它起个名字（比如：云联 · 一面）">
+      <button id="lobbyNewGo" class="primary">开一间</button>
+    </div>
+    <div class="lobby-tip">
+      <b>面试者和面试官</b>各开一台设备，扫同一个码，进<b>同一间</b>房。<br>
+      候选人只能有一位：第二台设备再选「面试者」会被挡在门口，
+      这时把它的角色改成面试官即可。<br>
+      麦克风需要 <b>https</b> 或 <b>本机地址</b> 才能用（手机走隧道地址就是 https）。
+    </div>
+  </div>
+</div>
+
 <header>
   <h1>边说边出题</h1>
+  <!-- 房间名：同时开着两个标签页时，光看题目分不出这是哪一场。
+       点了就回大厅换房间——比在「更多」里藏一个「换房间」更容易找。 -->
+  <button id="btnRoom" class="pill roompill" title="点这里回大厅，换一间">房间</button>
   <span class="pill" id="connPill">连接中…</span>
   <span class="pill" id="modelPill"></span>
   <div class="grow"></div>
+  <!-- 我在这间是什么身份。
+       ★ 手机上这一栏比「连接中…」「模型名」重要得多：一条 390px 宽的手机
+         屏幕上，人最常犯的错就是拿错角色进了同一间房（面试官当成面试者、
+         面试者以为自己能听）。那两个 pill 是给调试看的，这个是给人用的。
+         所以窄屏时反而把 modelPill 收起来、把它留下。 -->
+  <span class="pill" id="roleHint" title="这一间的面试者席位">身份</span>
   <span class="pill" id="progPill" title="AI 根据他说的话出了几次题。次数追上块数就说明跟得上"></span>
   <!-- 手机上这四个按钮挤不下：实测 390px 宽时 header 高 85px、占两行，
        每个按钮只有 31px 高（拇指点不准），而「下一个问题」被挤到屏幕中段。
@@ -597,10 +772,10 @@
   <button id="btnMore" class="iconbtn" aria-label="更多">☰</button>
 </header>
 
-<!-- 开新一场：给刚结束的这场起个名，然后拿到一个新的会话 id。
+<!-- 开新一场 = 在大厅里开一间新房，然后走进去。
      为什么非要起名——历史里躺着一串 s1792154859667 那种 id 谁都不想点开，
      而「AI 记得你以前面过什么」这个功能的全部价值都压在「能一眼认出
-     那一场是哪一场」上。名字留空也能过，会自动取时间当名字。 -->
+     那一场是哪一场」上。名字留空也能过，会自动取「面试 · 月-日 时:分」。 -->
 <div id="newWrap" class="modal" style="display:none">
   <div class="modal-box" style="width:min(420px,100%)">
     <div class="modal-head">
@@ -608,12 +783,12 @@
       <button id="btnNewClose" class="mini">取消</button>
     </div>
     <div style="padding:14px 12px">
-      <label class="f" for="newTitle">这一场叫什么？（给刚结束的这场起名）</label>
+      <label class="f" for="newTitle">这一间新的叫什么？</label>
       <input type="text" id="newTitle" maxlength="80" style="width:100%"
         placeholder="比如：云联科技 · 一面 · 10月17日">
       <div class="hint" style="margin-top:10px">
-        起完名这一场就会以这个名字留在「历史面试」里，随时能点开看。
-        新的一场是干净的：材料不用重填，但出过的题、说过的话都从头开始。
+        起名字是为了在大厅和历史里认得出这一间。留空会自动叫「面试 · 月-日 时:分」。
+        新材料、新对话都从这一间开始；上一间原样留在历史里，一个字不删。
       </div>
       <div class="row mt" style="margin-top:14px">
         <button id="btnNewGo" class="primary" style="flex:1">开始新的一场</button>
@@ -793,6 +968,40 @@ const $ = id => document.getElementById(id);
    地址栏也会同步成 ?s=<新id>，这样刷新页面、或者把链接发给另一台设备，
    打开的还是同一场（两个人各开一台设备就靠这个对齐）。 */
 let SESSION = new URLSearchParams(location.search).get('s') || 'default';
+
+/* ────────────────────── 房间 ──────────────────────
+
+   用户的原话：「每次创建一个面试，他都开一个新的房间一样，这样子别人每次
+   进来可以选择房间进入，而且每个房间只能有一个面试者。不同会话是不同房间，
+   然后没有人的房间就不开。」
+
+   三条在这里怎么落地：
+   · 「可以选择房间进入」→ 进门先看大厅（#lobby），列出还在用的房间
+   · 「每个房间只能有一个面试者」→ 进房间时向服务端占一个候选人席位，
+     占不到就停在门口，而不是进去之后才发现自己的话没进对话流
+   · 「没有人的房间就不开」→ 房间是懒创建的，只在大厅里列名字；
+     服务端 40 分钟没人碰就从内存里放掉（库里记录不动）
+
+   ★ 链接里带 ?s=<id> 就直接进那间房，不出大厅。
+     这正是"两个人各开一台设备进同一间"的做法——把带 s 的链接发过去即可。
+     也顺带保住了所有测试和书签：它们用的都是带 s 的地址。 */
+
+/* 这台设备是谁。席位和音轨都靠它认人，必须稳定。 */
+const CLIENT_ID = (() => {
+  let v = localStorage.getItem('clientId');
+  if(!v){
+    v = 'c' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('clientId', v);
+  }
+  return v;
+})();
+
+/* 大厅里选的「我是谁」。必须先选再进房间：服务端要在进门的这一刻
+   就把候选人席位锁上，晚一步（等点开始说话）就拦不住第二个人了。 */
+let lobbyRole = localStorage.getItem('micRole') === 'interviewer' ? 'interviewer' : 'candidate';
+
+let roomInfo = null;      // 当前房间 {id,title,...}
+let joined = false;       // 是不是已经进了房间（没进就不连 SSE、不轮询）
 
 /* 把当前场次写回地址栏。用 replaceState 而不是 pushState：
    换场不该在浏览器里留下几十条历史，否则手机返回键会把面试官
@@ -975,6 +1184,18 @@ function handle(m){
       trackState = m.tracks || [];
       renderTracks();
       break;
+
+    /* ★ 席位变动：别人占了 / 让出了面试者席位。
+       正面用途是"我知道这间现在有没有候选人"，而不是要抢。
+       所以这里只更新提示，绝不自动改自己的角色——一台已经在说话的
+       面试者设备被反过来改成面试官，对话流会瞬间乱掉。 */
+    case 'room_seat': {
+      /* 别人的进出：只更新身份 pill。
+         ★ 绝不在这里自动改自己的角色——一台已经在说话的面试者设备
+           被反过来改成面试官，对话流会瞬间乱掉。 */
+      renderSeat(m.seat);
+      break;
+    }
 
     case 'asr_state':
       /* 只在自己这条轨上动按钮状态。
@@ -1193,7 +1414,7 @@ function pollBackfill(history){
 /* ── 状态刷新 ── */
 async function refreshState(){
   try{
-    const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}`)).json();
+    const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}&c=${encodeURIComponent(CLIENT_ID)}`)).json();
     const heard = s.stats.chunks || 0;
     const made = (s.history || []).length;
 
@@ -1534,9 +1755,25 @@ async function renameSession(id, cur, btn){
     });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || '改名失败');
-    // 改的是本场：顶部的会话名也要跟着变
-    if(id === SESSION && j.title) document.title = `边说边出题 · ${j.title}`;
+    /* ★ 这两件事以前这里是漏的：
+       ① 页头的房间名（#btnRoom）和 document.title 只在进入房间时设一次，
+          改名之后不跟着变，人会觉得"改了没生效"；
+       ② 大厅卡片的名字来自 /api/rooms，历史里改完不回大厅重拉，
+          回到大厅还是旧名字。
+       两处都得补，否则同一个名字在三个地方各说各话。 */
+    if(id === SESSION){
+      if(j.title){
+        document.title = j.title + ' · 边说边出题';
+        $('btnRoom').textContent = j.title;
+        roomInfo = { ...(roomInfo || {}), title: j.title };
+      }else{
+        document.title = '边说边出题 · 原型';
+        $('btnRoom').textContent = '未命名面试';
+        roomInfo = { ...(roomInfo || {}), title: null };
+      }
+    }
     await loadHist();
+    if(!joined) loadLobby();     // 大厅开着就顺手让它跟上
     flash(j.title ? `已改名为「${j.title}」` : '名字已清掉');
   }catch(e){
     flash('改名失败：' + e.message);
@@ -1775,20 +2012,23 @@ $('btnStop').onclick = async () => {
 };
 
 /* ══════════════════════════════════════════════════════════════
-   换场：把这一场结束掉，换到一个干净的会话 id 上
+   换场：把这一场结束掉，换到另一间隔开的房间（另一个会话 id）
    ══════════════════════════════════════════════════════════════
 
-   ★ 为什么不能只调 /api/reset 就完事（这里踩过一个真实的坑）：
-   /api/reset 清的是服务端那个 id 的内存和库记录，但浏览器手里的
-   EventSource 还钉在旧 id 上——它不会自己知道"场次换了"。结果就是：
-   库里确实开了新的一场，而页面上接着来的事件全是旧场的，
-   服务端的 chunks 数一直涨，界面上一题不出。
+   ★ 为什么换场不能只发个新 id 就完事（这里踩过一个真实的坑）：
+   服务端确实可以就认一个新的 id，但浏览器手里的 EventSource 还钉在
+   旧 id 上——它不会自己知道"房间换了"。结果就是：库里确实开了新的一间，
+   而页面上接着来的事件全是旧房的，服务端的 chunks 数一直涨，一题不出。
    所以换场是这一整套动作，顺序不能乱：
-     1. 先停麦克风和回放（音频要发到新 id 去，不能继续往旧 id 灌）
-     2. close 掉 SSE（不然旧场的心跳会把"已连接"这个状态一直续命）
+     1. 先停麦克风和回放（音频要发到新房去，不能继续往旧房灌）
+     2. close 掉 SSE（不然旧房的心跳会把"已连接"这个状态一直续命）
      3. 换 SESSION、同步地址栏
-     4. 重连 SSE、清空页面、拉新状态
-   少做第 1 或第 2 步，症状都是"新的开始不了、旧的停不掉"。 */
+     4. 重连 SSE、清空页面、拉新房的状态
+   少做第 1 或第 2 步，症状都是"新的开始不了、旧的停不掉"。
+
+   ⚠️ 这个函数现在只在「房间内切到另一间」（从历史里恢复某一间）这条路上用；
+   「开新的一场」已经改成走 /api/rooms + enterRoom，因为那条路还要占席位。
+   两条路的差别只有"有没有席位"，其余动作一模一样——所以下面这段还被共享。 */
 async function switchSession(nextId, { keepMaterial = true } = {}){
   // 1. 停掉采集（顺序重要：先停音频，再断流）
   if(micRunning) await stopMic().catch(() => {});
@@ -1824,13 +2064,19 @@ async function switchSession(nextId, { keepMaterial = true } = {}){
 }
 
 $('btnReset').onclick = () => {
-  // 默认名字：时间。留空也能过，但给个能改的默认值比空框好点。
-  const d = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  $('newTitle').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  /* 默认名字直接给「面试 · 10-18 11:20」。
+     ★ 以前这里填的是 `${年}-${月}-${日} ${时}:${分}`（2026-10-18 11:20）。
+       两种写法看着差不多，但这个名字会同时出现在大厅卡片和历史列表里，
+       而大厅里别处显示的相对时间（「3 分钟前」）是按 Date.now() 算的。
+       这里用同一个 defaultRoomName()，两处就对得上，不会出现
+       「这间 11:20 的房」+「这间 3 分钟前」两个说法。 */
+  $('newTitle').value = defaultRoomName();
   $('newWrap').style.display = 'flex';
   setTimeout(() => { $('newTitle').focus(); $('newTitle').select(); }, 30);
 };
+/* 开场弹窗的说明文字在上面 HTML 里已经直接改好了，
+   这里不再运行时改 DOM——那种写法（querySelector 找 label 再赋 textContent）
+   在标签结构一变就静默失效，反而不如直接写在标签里。 */
 $('btnNewClose').onclick = () => { $('newWrap').style.display = 'none'; };
 $('newWrap').onclick = e => { if(e.target.id === 'newWrap') $('newWrap').style.display = 'none'; };
 $('newTitle').onkeydown = e => { if(e.key === 'Enter'){ e.preventDefault(); $('btnNewGo').click(); } };
@@ -1841,18 +2087,32 @@ $('btnNewGo').onclick = async () => {
   btn.disabled = true;
   btn.textContent = '开新一场…';
   try{
-    /* 一个请求做两件事：给旧场起名 + 拿到新场的 id。
-       合成一次调用的理由：分开调的话，中间任何一步失败都会留下
-       "名字存了但没换场"这种半截状态，而人已经以为换完了。 */
-    const r = await fetch('/api/reset', {
+    /* 现在「开新的一场」= 开一间新的房。
+       以前是给旧场起名、然后换到一个裸 id 上接着跑；有了房间之后，
+       一轮面试就是一间隔开的房——别人在大厅里能看见它、能选它。
+       旧那一间原样留在库里，也留在大厅里，不会因为开了新的就消失。 */
+    const r = await fetch('/api/rooms', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ session:SESSION, title })
+      body: JSON.stringify({ title })
     });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || '服务端没答应');
-    await switchSession(j.next || ('s' + Date.now()));
+
+    /* 顺手给刚结束的这间补个名字（如果它一直没有）。
+       补这一下是因为大厅按「有没有名字」筛：没名字的房间开完就找不着了。
+       不 await——命名失败不该把「新的一场已经开好」这件事回滚掉。 */
+    if(SESSION && !(roomInfo && roomInfo.title)){
+      fetch('/api/sessions/rename', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id: SESSION, title: defaultRoomName() })
+      }).catch(() => {});
+    }
+
+    lobbyHide();
+    // 走和大厅里点进一间房完全同一条路：占席位 → 切场 → 重连
+    await enterRoom(j.id, lobbyRole);
     $('newWrap').style.display = 'none';
-    flash(title ? `这一场已存为「${title}」，新的一场开始了。` : '新的一场开始了。');
+    flash(`新的一间「${j.title}」开好了。`);
     await loadHist();   // 弹层如果开着，让它立刻反映新名字
   }catch(e){
     flash('开新一场失败：' + e.message);
@@ -1861,6 +2121,14 @@ $('btnNewGo').onclick = async () => {
     btn.textContent = '开始新的一场';
   }
 };
+
+/* 默认名「面试 · 10-18 11:20」：这个名字要出现在大厅和历史里给人看，
+   能和别处对上的写法才好认——纯时间戳（1792290414130）对不上任何东西。 */
+function defaultRoomName(){
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `面试 · ${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 $('btnSummary').onclick = async () => {
   const s = await (await fetch(`/api/summary?s=${encodeURIComponent(SESSION)}`)).json();
@@ -2328,22 +2596,171 @@ function pollLines(transcript){
 }
 
 
-(async () => {
-  connect();
-  syncMicUI();
+/* ────────────────────── 大厅 ────────────────────── */
+
+function lobbyShow(){ $('lobby').classList.remove('hide'); }
+function lobbyHide(){ $('lobby').classList.add('hide'); }
+
+const ROLE_LABEL = { candidate: '面试者', interviewer: '面试官' };
+
+/* 「3 分钟前」比一个时间戳好读。
+   大厅里判断"这间还有人在吗"靠的就是这个数，写绝对时间等于让人自己算。 */
+function ago(ts){
+  if(!ts) return '还没开始';
+  const d = Math.max(0, Date.now() - ts);
+  const m = Math.floor(d / 60000);
+  if(m < 1) return '刚刚还在';
+  if(m < 60) return m + ' 分钟前';
+  const h = Math.floor(m / 60);
+  if(h < 24) return h + ' 小时前';
+  return Math.floor(h / 24) + ' 天前';
+}
+
+async function loadLobby(){
+  const box = $('lobbyList');
+  let items = [];
   try{
-    const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}`)).json();
+    const r = await fetch('/api/rooms');
+    const j = await r.json();
+    items = j.items || [];
+  }catch(e){
+    box.innerHTML = '<div class="room-empty">连不上服务。<br>确认 server.mjs 在跑，再刷新这一页。</div>';
+    return;
+  }
+  if(!items.length){
+    box.innerHTML = '<div class="room-empty">还没有面试间。<br>在下面起一个名字，就开了一间。</div>';
+    return;
+  }
+  box.innerHTML = items.map(r => {
+    /* 名字：起过名用名，挂过材料用材料名，都没有就叫「未命名」。
+       ★ 但「未命名」要是唯一还能看到的东西，这张卡片就是废的——
+         一排长得一模一样的「未命名面试」，人只能靠猜。
+         所以没名字的卡片把它的 id 最后几位垫在下面当编号：
+         `s1792154859667` 这种机器名不该正着显示，但也不是完全没用——
+         它是同一个房间在别处（历史面板、日志）唯一的对照物。 */
+    const named = r.title || r.material_name;
+    const name = named || ('未命名 · ' + String(r.id).slice(-4));
+    /* 一行里塞四件事：出过几道题 / 说过几句 / 几个面试官在听 / 面试者席位。
+       目的是让人一眼选中"就是要进的那间"，而不是挨个点开看。 */
+    const bits = [];
+    if(r.suggestions) bits.push(`${r.suggestions} 道题`);
+    if(r.lines) bits.push(`${r.lines} 句对话`);
+    if(r.material_name && r.title) bits.push(esc(r.material_name));
+    bits.push(r.open ? '刚才还有人' : ago(r.updated_at));
+    if(r.interviewers_listening) bits.push(`<span class="hot">${r.interviewers_listening} 个面试官在听</span>`);
+    // 席位只对「我要当面试者」这件事有影响，所以这个标签跟着角色走
+    if(r.candidate_taken) bits.push(`<span class="taken">面试者：${esc(r.candidate_label || '已有人')}</span>`);
+    else if(lobbyRole === 'candidate') bits.push('<span class="hot">面试者席位空着</span>');
+    return `<button class="room${named ? '' : ' unnamed'}${r.open ? ' live' : ''}" data-room="${esc(r.id)}">
+      <div class="room-name">${esc(name)}</div>
+      <div class="room-meta">${bits.join(' · ')}</div>
+    </button>`;
+  }).join('');
+
+  box.querySelectorAll('[data-room]').forEach(el => {
+    el.onclick = () => enterRoom(el.dataset.room, lobbyRole);
+  });
+}
+
+/* 进房间。整条链路的关键动作，任何一步失败都要留在门口并说清原因。 */
+async function enterRoom(id, role){
+  const btn = $('lobbyNewGo');
+  const label = role === 'interviewer' ? '面试官' : '面试者';
+  try{
+    const r = await fetch('/api/room/join', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: id, clientId: CLIENT_ID, role, label })
+    });
+    const j = await r.json();
+
+    /* 409 = 这间的候选人席位已经有人了。
+       这是"每个房间只能有一个面试者"唯一对外的表现，必须处理得让人看得懂：
+       一个明确的「面试者已经有人了，你是面试官吗？」+ 一键改成面试官再进。
+       如果只是弹个红字就完事，人会以为是网络问题又点一遍。 */
+    if(r.status === 409){
+      const who = j.seat && j.seat.label ? `「${j.seat.label}」` : '另一台设备';
+      if(confirm(`这一场的面试者席位已经被${who}占了。\n\n要作为【面试官】进入这一间吗？`)){
+        localStorage.setItem('micRole', 'interviewer');
+        lobbyRole = 'interviewer';
+        return enterRoom(id, 'interviewer');
+      }
+      return;
+    }
+    if(!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+
+    // 进成功：换场 + 关大厅。顺序很关键——先切 SESSION 再重连。
+    SESSION = id;
+    roomInfo = j.room || { id };
+    joined = true;
+    syncUrl();
+    if(roomInfo.title) document.title = roomInfo.title + ' · 边说边出题';
+    $('btnRoom').textContent = roomInfo.title || '未命名面试';
+    $('btnRoom').title = '点这里回大厅换一间';
+    // 服务端认了这个角色，本地也要跟上（可能和进门前选的不一样）
+    if(j.seat && j.seat.mine) localStorage.setItem('micRole', 'candidate');
+
+    lobbyHide();
+    await afterJoin();
+  }catch(e){
+    flash('进不去这一间：' + e.message);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+/* 进了房间之后要做的事：重置页面状态、连上去、把已有的内容拉回来。
+   和原来「换场」是同一件事，只是入口从弹窗变成了大厅。 */
+async function afterJoin(){
+  // 上一间房留下的东西一律清掉，否则新房间里会看到上一间的题
+  resetPanel();
+  $('feed').innerHTML = '<div class="empty" id="emptyHint">进到房间了。点「开始说话」，题目就会跟着来。</div>';
+  saidEl = null;
+  saidBlockEl.interviewer = null;
+  resetFlash();
+  lineCount = 0;
+  histLen = -1;
+  ceilSeq = -1;
+  nqSeq = -1;
+  gotDraft = false;
+  lastMsgAt = 0;
+  trackState = [];
+
+  connect();
+  await bootstrapRoom();
+  refreshState();
+}
+
+/* 把这一间房已经有的东西拉回来：材料、统计、标题。
+   从大厅进来的和刷新页面的走的是同一段，所以刷新不会看起来像丢了东西。 */
+async function bootstrapRoom(){
+  try{
+    const s = await (await fetch(`/api/state?s=${encodeURIComponent(SESSION)}&c=${encodeURIComponent(CLIENT_ID)}`)).json();
     $('cfgBase').value = s.conf.baseUrl;
     $('cfgModel').value = s.conf.model;
     $('modelPill').textContent = s.conf.model + ' @ ' + s.conf.baseUrl.replace(/^https?:\/\//,'');
 
-    /* 材料不再写死成「0 字」。
-       以前这里硬写 '0 字'，于是服务重启、页面刷新之后，材料明明已经在
-       服务端内存里、AI 也还在拿它出题，界面却显示「0 字」——看起来像材料
-       丢了，人就会再粘一遍。现在按实际装载情况显示。 */
+    if(s.room && s.room.title){
+      roomInfo = { ...(roomInfo || {}), ...s.room };
+      document.title = s.room.title + ' · 边说边出题';
+      $('btnRoom').textContent = s.room.title;
+    }else if(s.room){
+      roomInfo = { ...(roomInfo || {}), ...s.room };
+      $('btnRoom').textContent = roomInfo.title || '未命名面试';
+    }
+
+    /* 身份 pill：进门时服务端给的席位就是标准答案。
+       另外两条来源（进门前点选的角色、SSE 的 room_seat）只用来兜底，
+       因为服务端是唯一知道"这个席位到底归谁"的地方——
+       浏览器自己记的 localStorage 在换设备、清缓存之后会说瞎话。
+
+       ★ 请求要带上 clientId（?c=），不然服务端算不出 mine，
+         刷新之后这台设备会把自己的席位认成"别人占着"。 */
+    if(s.seat){
+      renderSeat(s.seat);
+    }
+
     let matLabel = '0 字';
     if(s.persisted && s.persisted.materialId){
-      // 这一场挂着一份存过的材料：把正文拉回来填进框里
       try{
         const g = await (await fetch('/api/materials/get?id=' + s.persisted.materialId)).json();
         if(g.material){
@@ -2353,10 +2770,6 @@ function pollLines(transcript){
       }catch(_){}
     }
     $('matStat').textContent = matLabel;
-
-    /* 告诉用户在跨场记忆里有多少东西。
-       这个数不显眼，但它是「AI 记得你之前面过」的唯一可见证据——
-       没有它，人只能靠感觉猜这个功能到底有没有生效。 */
     if(s.persisted && s.persisted.priorAsked > 0){
       $('matStat').textContent += ` · 记得 ${s.persisted.priorAsked} 个旧问题`;
     }
@@ -2367,8 +2780,138 @@ function pollLines(transcript){
     $('connPill').textContent = '服务未启动';
     $('connPill').className = 'pill warn';
   }
-  refreshState();
-  setInterval(refreshState, 2000);
+}
+
+/* 身份 pill 三态：我是面试者 / 别人是面试者 / 席位空着。
+   ★ 这三种说法必须分得清——手机上一句「面试者：已有人」
+     和「你是面试者」只差一个字，但决定人要不要再点一次进入。 */
+function renderSeat(st){
+  const el = $('roleHint');
+  if(!el) return;
+  if(!st || !st.taken){
+    el.textContent = '面试者席位空着';
+    el.className = 'pill';
+    el.title = '这间还没有面试者。点「开始说话」的人就成为面试者。';
+  }else if(st.mine){
+    el.textContent = '你是面试者';
+    el.className = 'pill live';
+    el.title = '这一间的面试者席位是你的，麦克风收到的就是你的话。';
+  }else{
+    el.textContent = '面试者：' + (st.label || '已有人');
+    el.className = 'pill warn';
+    el.title = '这一间已经有面试者了。你要么当面试官，要么换一间。';
+  }
+}
+
+/* 回大厅：停麦、断开这一间、把地址栏的 ?s 去掉。
+   ★ 必须停麦：麦克风是连在"这一间"上的，人走了音频还在往那间灌，
+     等于别人发言时旁边一直有个幽灵音轨在烧额度。 */
+async function backToLobby(){
+  if(micRunning) await stopMic().catch(() => {});
+  try{
+    await fetch('/api/room/leave', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: SESSION, clientId: CLIENT_ID })
+    });
+  }catch(_){}
+  if(es){ try{ es.close(); }catch(_){} es = null; }
+  joined = false;
+  roomInfo = null;
+  document.title = '边说边出题 · 原型';
+  const u = new URL(location.href);
+  u.searchParams.delete('s');
+  history.replaceState(null, '', u);
+  lobbyShow();
+  loadLobby();
+}
+
+/* 大厅上「开一间」。名字留空也能开——但不能没有 id，
+   否则两个人都点了「开一间」会撞进同一个默认房间。 */
+async function createAndEnter(){
+  const title = $('lobbyNewTitle').value.trim();
+  $('lobbyNewGo').disabled = true;
+  try{
+    const r = await fetch('/api/rooms', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ title })
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || '开不了');
+    $('lobbyNewTitle').value = '';
+    await enterRoom(j.id, lobbyRole);
+  }catch(e){
+    flash('开不了新的：' + e.message);
+  }finally{
+    $('lobbyNewGo').disabled = false;
+  }
+}
+
+/* 大厅里选「我是面试者 / 面试官」。这个选择在进房间之前就要定，
+   因为服务端在进门那一刻就要锁候选人席位。 */
+function syncLobbyRole(){
+  document.querySelectorAll('[data-lobby-role]').forEach(el => {
+    const on = el.dataset.lobbyRole === lobbyRole;
+    el.className = 'primary' === el.className ? el.className : (on ? 'primary' : '');
+    el.classList.toggle('primary', on);
+  });
+  $('lobbyRoleHint').textContent = lobbyRole === 'candidate'
+    ? '这间房的面试者席位会归你（别人再选面试者会被挡在门口）'
+    : '面试官可以有多个，各自一条音轨，互不干扰';
+}
+
+$('lobbyNewGo').onclick = createAndEnter;
+$('btnRoom').onclick = backToLobby;
+document.querySelectorAll('[data-lobby-role]').forEach(el => {
+  el.onclick = () => {
+    lobbyRole = el.dataset.lobbyRole;
+    localStorage.setItem('micRole', lobbyRole);
+    // 角色变了，音轨 id 也要跟着变：候选人用固定 id，面试官要独立一条
+    localStorage.removeItem('micTrack');
+    myRole = lobbyRole;
+    myTrack = newTrackId(myRole);
+    myLabel = myRole === 'interviewer' ? '面试官' : '候选人';
+    localStorage.setItem('micLabel', myLabel);
+    syncLobbyRole();
+    syncMicUI();
+    loadLobby();     // 席位占用情况可能影响"我能不能进"
+  };
+});
+
+
+
+/* ────────────────────── 启动 ──────────────────────
+
+   两条入口，差别只在一件事：有没有带 ?s=<房间>。
+
+   · 带了 → 直接进那一间（这是两个人各开一台设备对齐的做法，也是所有
+     测试和书签用的地址）。还是先走一次 /api/room/join，因为席位要在
+     进门时锁住；拿不到候选人席位就退回大厅去挑。
+   · 没带 → 停在大厅，让人挑房间或开一间。
+
+   不能"没进房间就先把界面跑起来"：那样底下的按钮全是可点的，
+   人会对着一个没有房间的界面点「开始说话」，然后疑心是自己的问题。 */
+(async () => {
+  syncMicUI();
+  syncLobbyRole();
+
+  const initial = new URLSearchParams(location.search).get('s');
+  if(initial && initial !== 'default'){
+    // 带房间进来：试着直接进，失败（席位被占）就退回大厅
+    await enterRoom(initial, lobbyRole);
+    if(!joined){
+      lobbyShow();
+      await loadLobby();
+    }
+  }else{
+    // 裸地址：先看大厅。default 这个历史默认房间不再自动进入——
+    // 它现在只是历史里的一条，和别的房间平等。
+    lobbyShow();
+    await loadLobby();
+  }
+
+  setInterval(() => { if(joined) refreshState(); }, 2000);
+  // 大厅里每 5 秒刷一次，让人看到"谁刚进来了"
+  setInterval(() => { if(!joined) loadLobby(); }, 5000);
 })();
 </script>
 </body>

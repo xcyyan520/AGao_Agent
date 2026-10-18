@@ -39,4 +39,8 @@ Thumbs.db
 
 # 截图：调布局时用 .run/shot.mjs 拍，看一眼就扔，不留仓库
 .run/shot_*.png
+.run/flow_*.png
 .run/_metrics.mjs
+
+# 大厅 / 房间改造时的验收截图，同样是看完就扔，不是产品资源
+shots/

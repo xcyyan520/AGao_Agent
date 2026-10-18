@@ -118,6 +118,23 @@ function newSession(id, conf = {}) {
     // 面试官说的话先攒在这里（按音轨分别攒），等他真的停下来再当成一个问题发出去。
     qBuf: new Map(),      // trackId -> 待提交的问题文本
     qTimer: new Map(),    // trackId -> 防抖定时器
+
+    /* ── 房间 ──
+       一场面试 = 一个房间。房间名就是 session 的 title（可以起名）。
+       `lastActiveAt` 是空房回收的依据，任何请求进来都会 touch 一下。
+       没有它的话，内存里的 sessions Map 只增不减：开过多少场就常驻多少场，
+       每场还各带一个 judge（内含整份材料）+ chunker 定时器。 */
+    title: null,
+    lastActiveAt: Date.now(),
+
+    /* 候选人席位：整个房间只有一个。
+       ★ 为什么要在【开麦之前】就锁住，而不是靠音轨判断：
+         一个人打开页面、还没点「开始说话」之前，音轨是 0 条；
+         这时第二个人也打开页面并选了「我是面试者」，两个人都不算冲突，
+         等第一个人按下开始说话，才发现被顶掉了。
+         席位必须在「进房间」这一步就定，早了才能给出清楚的拒绝。
+       结构：{ clientId, label, since, touchedAt } */
+    seatCandidate: null,
   };
 
   s.judge = new IncrementalQuestioner(s.conf);
@@ -131,6 +148,8 @@ function newSession(id, conf = {}) {
     try {
       const data = store.getSessionData(id);
       if (data) {
+        // 房间名：从库里带回来。缺了它刷新页面后自己这间的名字就变成 id 了。
+        s.title = data.session.title || null;
         if (data.session.material_id) {
           const m = store.getMaterial(data.session.material_id);
           if (m) s.judge.setContext({ materials: m.text });
@@ -281,8 +300,155 @@ function send(s, type, payload = {}) {
 }
 
 function getSession(id) {
-  return sessions.get(id) || newSession(id);
+  /* 取会话 = 有人正在用这个房间。在这里统一续命，而不是让每个路由自己
+     touchRoom 一次——路由有十几个，漏掉一个就会出现「一直在用却
+     被当成空房回收」这种极难复现的问题。 */
+  const s = sessions.get(id);
+  if (s) { touchRoom(s); return s; }
+  const fresh = newSession(id);
+  touchRoom(fresh);
+  return fresh;
 }
+
+/* ────────────────────── 房间 ──────────────────────
+
+   用户的原话：「每次创建一个面试，他都开一个新的房间一样，这样子别人每次
+   进来可以选择房间进入，而且每个房间只能有一个面试者。不同会话是不同房间，
+   然后没有人的房间就不开。」
+
+   三条需求对应三处设计：
+
+   1) 「可选房间进入」→ 大厅列表（/api/rooms）。房间的元信息（名字、材料、
+      出过几道题、几个人在）全部来自 SQLite，不依赖进程内存——服务重启后
+      大厅里该有的房间一个不少。
+
+   2) 「每个房间只能有一个面试者」→ 席位（seatCandidate）。这一条不是防御
+      性代码，是业务规则：两个人同时以为自己是被面试的，两条音轨都会被
+      当成 candidate 灌进同一个切块器，切出来的句子一半是甲的一半是乙的，
+      出来的题会问到一个根本没人在意的方向上去。
+      ★ 席位必须在【进房间】时定，不能等到开麦时靠音轨判断：
+        第二个人完全可能在第一个人点「开始说话」之前就进来了。
+
+   3) 「没有人的房间就不开」→ 房间是**懒创建**的：大厅里列一个还没人进过的
+      房间不会把它实例化；只有 GET /api/room/join 才 newSession。
+      再配一个回收定时器，把长时间没人碰的房间从内存里放掉（库里的记录不动）。
+      这样「开过 50 场」不会变成 50 个 judge 常驻内存、每个都揣着整份逐字稿。
+*/
+
+/** 房间多久没人碰就从内存里放掉。库里的数据一律不动。 */
+const ROOM_IDLE_MS = 40 * 60 * 1000;     // 40 分钟
+/** 席位多久没心跳就算人走了。占着席位不开麦、也不轮询，等于人已经离开。 */
+const SEAT_STALE_MS = 130 * 1000;        // 130 秒（前端每 20 秒碰一次）
+const ROOM_SWEEP_MS = 60 * 1000;         // 每分钟扫一次
+
+function touchRoom(s) {
+  if (!s) return;
+  s.lastActiveAt = Date.now();
+  // 席位跟着请求一起续命：只有真在用这个页面的人才会发请求。
+  if (s.seatCandidate && Date.now() - s.seatCandidate.touchedAt > SEAT_STALE_MS) {
+    s.seatCandidate = null;
+  } else if (s.seatCandidate) {
+    s.seatCandidate.touchedAt = Date.now();
+  }
+}
+
+/** 这个席位还归不归他。超时未续 = 人走了，席位自动放出。 */
+function candidateSeatHolder(s) {
+  const seat = s.seatCandidate;
+  if (!seat) return null;
+  if (Date.now() - seat.touchedAt > SEAT_STALE_MS) { s.seatCandidate = null; return null; }
+  return seat;
+}
+
+/** 大厅里每个房间要显示的东西。只读库 + 内存里的活跃度，不实例化房间。 */
+function roomList() {
+  const rows = store ? store.listSessions(200) : [];
+  const now = Date.now();
+  const out = rows.map(r => {
+    const live = sessions.get(r.id);
+    const seat = live ? candidateSeatHolder(live) : null;
+    return {
+      id: r.id,
+      title: live?.title || r.title || null,
+      material_name: r.material_name || null,
+      suggestions: r.suggestions || 0,
+      turns: r.turns || 0,
+      lines: r.lines || 0,
+      started_at: r.started_at,
+      updated_at: r.updated_at,
+      // 内存里有没有这个房间 = 现在有没有人在用
+      open: !!live,
+      // 有没有人在里面（活跃 + 至少一条连接的音轨，或者刚有请求）
+      people: live ? live.clients.size : 0,
+      /* 候选人席位是否已被占。大厅上要能一眼看出来，
+         否则第二个人点进去之后才被拒绝，体验很差。 */
+      candidate_taken: !!seat,
+      candidate_label: seat?.label || null,
+      candidates_listening: live ? [...live.tracks.values()].filter(t => t.stream && t.role === 'candidate').length : 0,
+      interviewers_listening: live ? [...live.tracks.values()].filter(t => t.stream && t.role === 'interviewer').length : 0,
+    };
+  })
+  /* ★ 大厅只列「有名有姓、还用得上」的房间，不列全部历史。
+     第一版把库里 200 场全铺出来，结果是 69 张卡片，绝大多数是
+     调试留下的 `uimic_1792290414130`、`tracks_1792290397626`——
+     用户第一次打开就看到一堆机器名，判断是「这页面坏了」。
+
+     留下的两类：
+       · open —— 内存里还活着，现在确实有人在用
+       · title —— 起过名字（人有意建的；没起名的会在 createRoom 里
+                  自动补一个「面试 · 10-18 11:20」，所以这里不会是空）
+     「历史面试」面板本来就负责翻旧账，大厅不该重复它。 */
+  .filter(r => r.open || r.title)
+  .sort((a, b) => {
+    // 有人的排最前，其次按最近活跃
+    if (a.open !== b.open) return a.open ? -1 : 1;
+    if (b.interviewers_listening !== a.interviewers_listening) return b.interviewers_listening - a.interviewers_listening;
+    return (b.updated_at || 0) - (a.updated_at || 0) || String(b.id).localeCompare(String(a.id));
+  })
+  .slice(0, 24);
+  return out;
+}
+
+/** 没起名字的房间给个能认的默认名。
+ *  ★ 这不是"美观"问题：大厅是按「有没有名字」筛的，名字为空等于
+ *    这间房永远不会出现在大厅里——人开了一间、刷新一下，就不见了。
+ *    所以「起个名字」是建房的必经步骤，不是可选美化。 */
+function defaultRoomTitle() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `面试 · ${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 建一个空房间（只有 id 和名字，不实例化会话）。
+ *  没给名字就现起一个：大厅按「有没有名字」筛，空名字的房间
+ *  等于开完就不见了（见 defaultRoomTitle 的说明）。 */
+function createRoom({ title = null, materialId = null } = {}) {
+  const id = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const t = title || defaultRoomTitle();
+  const r = dbWrite(st => st.ensureSession(id, materialId, t), 'ensureSession');
+  return { id, title: t, session: r?.session || null };
+}
+
+/** 空房回收：把长时间没人碰的房间从内存里放掉。
+ *  只删 sessions 里的那个对象，库里一行不动——历史面试照旧能加载。 */
+async function sweepRooms() {
+  const now = Date.now();
+  for (const [id, s] of sessions) {
+    if (now - (s.lastActiveAt || 0) < ROOM_IDLE_MS) continue;
+    // 还有人在线就不动：连接还挂着的房间，无论多久都算活的
+    if (s.clients.size) continue;
+    for (const trackId of [...s.tracks.keys()]) {
+      await stopAsr(s, trackId).catch(() => {});
+    }
+    try { s.chunker.close(); } catch (_) {}
+    stopHeartbeat(s);
+    sessions.delete(id);
+    console.log(`[room] 回收空房 ${id}（${Math.round((now - s.lastActiveAt) / 60000)} 分钟没人）`);
+  }
+}
+
+const roomSweeper = setInterval(() => { sweepRooms().catch(() => {}); }, ROOM_SWEEP_MS);
+roomSweeper.unref?.();
 
 /* ────────────────────── 语音识别（ASR）──────────────────────
 
@@ -644,9 +810,34 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/state') {
       const s = getSession(url.searchParams.get('s') || 'default');
+      touchRoom(s);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify({
         conf: { baseUrl: s.conf.baseUrl, model: s.conf.model, hasKey: !!s.conf.apiKey },
+        /* 房间自己的信息。页头要显示房间名，人得能确认自己进的是哪一间——
+           手机上同时开着两个标签页时，光看题目分不出这是哪一场。 */
+        room: {
+          id: s.id,
+          title: s.title || null,
+          members: s.clients.size,
+          startedAt: s.startedAt,
+          width: 0,     // 占位，前端不用；留着免得结构随版本变
+        },
+        /* 席位：谁是被面试的那个。
+           前端靠它决定「开始说话」要不要允许点、显示成什么角色。
+           mine 要算：手机刷新页面之后唯一能确认"这个席位是不是我的"
+           的办法就是让服务端拿 clientId 对一下——
+           本地 localStorage 在换设备、清缓存之后会说瞎话。 */
+        seat: (() => {
+          const held = candidateSeatHolder(s);
+          const me = url.searchParams.get('c') || '';
+          return {
+            taken: !!held,
+            mine: !!(held && me && held.clientId === me),
+            label: held?.label || null,
+            since: held?.since || null,
+          };
+        })(),
         currentQuestion: s.judge.currentQuestion,
         asked: s.judge.asked,
         answer: s.judge.answer,
@@ -895,6 +1086,89 @@ const server = http.createServer(async (req, res) => {
       const ok = dbWrite(st => st.deleteMaterial(Number(body.id)), 'deleteMaterial');
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify({ ok: !!ok }));
+    }
+
+    /* ── 房间：大厅 ──
+       列表只要库；新建只写库。两者都不实例化会话，
+       所以「大厅里躺着一百个历史房间」不会变成一百个常驻的 judge。 */
+    if (p === '/api/rooms' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, items: roomList() }));
+    }
+
+    if (p === '/api/rooms' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
+      const title = String(body.title || '').trim().slice(0, 80) || null;
+      const r = createRoom({ title, materialId: body.materialId ? Number(body.materialId) : null });
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, id: r.id, title: r.title }));
+    }
+
+    /* ── 进房间 ──
+       这是「每个房间只能有一个面试者」的唯一执行点。
+       前端在打开房间时先调它，被拒就停在门口（显示「这间的面试者已经有人了」
+       + 一个「以面试官身份进入」的按钮），而不是让人先进去、说到一半才发现
+       自己的话没进对话流。 */
+    if (p === '/api/room/join' && req.method === 'POST') {
+      const body = await readBody(req);
+      const s = getSession(body.session || url.searchParams.get('s') || 'default');
+      touchRoom(s);
+      const clientId = String(body.clientId || '').trim() || `c${Math.random().toString(36).slice(2, 8)}`;
+      const role = body.role === 'interviewer' ? 'interviewer' : 'candidate';
+      const label = String(body.label || '').trim().slice(0, 24) || null;
+
+      let seatInfo = null;
+      if (role === 'candidate') {
+        const held = candidateSeatHolder(s);
+        if (held && held.clientId !== clientId) {
+          res.writeHead(409, { 'Content-Type': MIME['.json'] });
+          return res.end(JSON.stringify({
+            ok: false,
+            error: `这一场的面试者席位已经被「${held.label || '另一台设备'}」占了`,
+            seat: { taken: true, label: held.label || null, since: held.since || null },
+          }));
+        }
+        const now = Date.now();
+        s.seatCandidate = {
+          clientId,
+          label: label || '面试者',
+          since: held?.since || now,
+          touchedAt: now,
+        };
+        seatInfo = { taken: true, mine: true, label: s.seatCandidate.label, since: s.seatCandidate.since };
+        console.log(`[room] ${s.id} 面试者席位 → ${s.seatCandidate.label} (${clientId})`);
+        broadcastTracks(s);
+        send(s, 'room_seat', { seat: seatInfo });
+      }
+
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({
+        ok: true,
+        clientId,
+        room: {
+          id: s.id,
+          title: s.title || null,
+          materialId: s.materialId ?? null,
+          materialsChars: s.judge.materials.length,
+          currentQuestion: s.judge.currentQuestion,
+        },
+        seat: seatInfo || { taken: !!s.seatCandidate, mine: false, label: s.seatCandidate?.label || null },
+        tracks: trackList(s),
+      }));
+    }
+
+    /** 主动让出席位（换角色、离开房间时调）。 */
+    if (p === '/api/room/leave' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
+      const s = sessions.get(String(body.session || '')) || null;
+      const clientId = String(body.clientId || '');
+      if (s && s.seatCandidate && s.seatCandidate.clientId === clientId) {
+        s.seatCandidate = null;
+        broadcastTracks(s);
+        send(s, 'room_seat', { seat: { taken: false, mine: false, label: null } });
+      }
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, seat: { taken: !!(s && s.seatCandidate), label: s?.seatCandidate?.label || null } }));
     }
 
     /* ── 历史面试 ── */

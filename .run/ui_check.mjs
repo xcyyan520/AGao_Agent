@@ -90,12 +90,18 @@ const evalJs = async (expr) => {
   return r.result?.result?.value;
 };
 
-await send('Page.navigate', { url: APP }, sessionId);
+/* ★ 首屏必须带 ?s=<房间> 进来，不能停在裸地址。
+   裸地址现在是**大厅**——底下那个界面整个被 #lobby 盖着，后面所有
+   「点某个按钮看结果」的检查都会在量一个被遮住的页面：
+   elementFromPoint 命中的永远是 #lobby，提示条被判「被遮住」，
+   题目被判「没渲染到页面上」，全都是假的。
+   （房间里才会跑真正的界面，这也是用户实际的用法：从大厅点进一间。） */
+const TEST_SESSION = 'uibase_' + Date.now();
+await send('Page.navigate', { url: `${APP}/?s=${TEST_SESSION}` }, sessionId);
 await sleep(1800);
 
-// 先重置，保证这次跑的是干净会话（否则上一轮的题会混进统计）
-await fetch(`${APP}/api/reset`, { method: 'POST' });
-await sleep(600);
+/* 不再调 /api/reset 了：新 id 本来就是干净的一场，而 reset 会把这一场从
+   内存里删掉——页面正连着它，删完 SSE 断开、后面的检查全在测一具尸体。 */
 
 const results = [];
 const check = (name, pass, detail = '') => {
