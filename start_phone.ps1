@@ -29,6 +29,9 @@ try {
 $PORT      = if ($env:PORT) { [int]$env:PORT } else { 8900 }
 $TUNNEL_LOG = Join-Path $PWD '.run\tunnel.log'
 $TUNNEL_ERR = Join-Path $PWD '.run\tunnel.err.log'
+# stdout 也要接走：不接的话 cloudflared 会继承本脚本的 stdout 管道且永不关闭，
+# 于是 `.\start_phone.ps1 | ...`、`$(...)` 这类捕获在脚本退出后仍然挂着。
+$TUNNEL_OUT = Join-Path $PWD '.run\tunnel.out.log'
 $SERVER_LOG = Join-Path $PWD '.run\server_phone.log'
 
 New-Item -ItemType Directory -Force -Path (Join-Path $PWD '.run') | Out-Null
@@ -127,7 +130,7 @@ Say '  正在开隧道…' 'DarkGray'
 $tunnelProc = Start-Process -FilePath $cf `
   -ArgumentList @('tunnel', '--url', "http://127.0.0.1:$PORT", '--no-autoupdate', '--logfile', $TUNNEL_LOG, '--loglevel', 'info') `
   -WindowStyle Hidden -PassThru `
-  -RedirectStandardError $TUNNEL_ERR
+  -RedirectStandardOutput $TUNNEL_OUT -RedirectStandardError $TUNNEL_ERR
 
 # 从两个文件里把 trycloudflare 的网址抠出来（stderr 才是真有网址的那个）
 $url = $null
@@ -154,16 +157,30 @@ if (-not $url) {
 }
 
 # ── 5. 打出来 ────────────────────────────────────────────────────────
+# ★ 网址同时写进 .run\URL.txt。理由：这个窗口一关、或者脚本被别的进程
+#   起在后台，网址就只剩屏幕上一行字，谁都没法再找到它。
+#   写进固定文件之后，「网址是多少」永远是一条命令的事：
+#       Get-Content .run\URL.txt
+$URL_FILE = Join-Path (Join-Path $PWD '.run') 'URL.txt'
+try { Set-Content -LiteralPath $URL_FILE -Value $url -Encoding ascii -NoNewline } catch { }
+
 Say ''
 Say '  ════════════════════════════════════════════════════════════' 'Green'
-Say '   手机扫这个二维码（用微信扫一扫）' 'Green'
+Say '   ★ 手机扫这个二维码（微信扫一扫）' 'Green'
 Say '  ════════════════════════════════════════════════════════════' 'Green'
 Say ''
 
 node tools/qr.mjs $url
 
 Say ''
-Say "  网址：$url" 'Cyan'
+Say '  ┌──────────────────────────────────────────────────────────┐' 'Cyan'
+Say '  │  网址（手输 / 发给别人，都行）                            │' 'Cyan'
+Say '  └──────────────────────────────────────────────────────────┘' 'Cyan'
+Say ''
+Say "    $url" 'White'
+Say ''
+Say "    已存到：$URL_FILE" 'DarkGray'
+Say '    以后想再查：Get-Content .run\URL.txt' 'DarkGray'
 Say ''
 Say '  ── 怎么用 ────────────────────────────────────────────────' 'DarkGray'
 Say '   1. 先在电脑上把「面试材料」贴好、点保存' 'White'
@@ -190,6 +207,8 @@ try {
   Say '  正在关闭…' 'DarkGray'
   if ($tunnelProc -and -not $tunnelProc.HasExited) { $tunnelProc | Stop-Process -Force -ErrorAction SilentlyContinue }
   if ($serverProc -and -not $serverProc.HasExited) { $serverProc | Stop-Process -Force -ErrorAction SilentlyContinue }
+  # 网址已经跟着隧道一起失效了，把文件删掉，免得下次有人照着旧网址输
+  Remove-Item -LiteralPath $URL_FILE -Force -ErrorAction SilentlyContinue
   # 把代码页还原，别把用户原来的窗口弄脏
   if ($__origCP -and $__origCP -ne 65001) {
     try { chcp $__origCP > $null } catch { }
