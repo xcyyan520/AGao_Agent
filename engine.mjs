@@ -145,6 +145,10 @@ export const DEFAULT_CHUNKER = {
   preferChars: 60,   // 一个标点都没有时的忍耐心：再长就按词边界硬切
   maxChars: 120,     // 硬上限，防止一口气说一大段撑爆上下文
   maxWaitMs: 700,    // 静音这么久说明他停下来了，可以切
+  /* ASR 已经明确「这句说完了」时的等待。此时说话人真的停下来了，
+     再等 700ms 纯属白等——那 700ms 会原样叠到「说完」到「出题」之间。
+     200ms 只是给同一批迟到的字留一点合并窗口。 */
+  finalWaitMs: 200,
   hardMaxMs: 3000,   // 再慢也要切，保证 AI 有输出节奏
 };
 
@@ -222,13 +226,22 @@ export class Chunker extends EventEmitter {
     this.closed = false;
   }
 
-  /** 喂入新到达的文字（来自 ASR 的中间结果或定稿结果） */
-  push(text) {
+  /** 喂入新到达的文字（来自 ASR 的中间结果或定稿结果）
+   *
+   *  `final` 是 ASR 语义：这一句**说完了**，后面不会再有字补进来。
+   *
+   *  为什么需要这个标志：切块器原来一律按 maxWaitMs(700ms) 等停顿。
+   *  但 ASR 定稿时说话人**已经停了**，再等 700ms 纯属白等——那 700ms
+   *  会原封不动加到「我说完」到「题目上屏」之间。
+   *  带标点的长句不受影响（_try 的规则 2 会当场切），吃亏的是
+   *  「对，是这样的。」这类短句：它够不到 minChars(24)，只能靠 pause 兜底。 */
+  push(text, { final = false } = {}) {
     if (this.closed) return;
     const now = Date.now();
     if (!this.buf) this.firstCharAt = now;
     this.buf += text;
     this.lastCharAt = now;
+    this._finalHint = final;
     this._try();
   }
 
@@ -272,16 +285,27 @@ export class Chunker extends EventEmitter {
     const sinceLast = Date.now() - this.lastCharAt;
     const sinceFirst = Date.now() - this.firstCharAt;
 
+    /* ASR 已经定稿 = 说话人停下来了，不必再等满 maxWaitMs。
+       这一条能把「说完最后一个字」到「切出块」之间砍掉约 0.5 秒。
+       只改【等多久】，不改切点（_force 里仍然优先落在标点上）。
+
+       ⚠️ 等待阈值必须存成字段 this._waitMs，定时器回调里也要用它——
+       曾经写成「回调里仍然比较 this.opt.maxWaitMs」，结果 finalWaitMs
+       到点后条件不成立，又老老实实再等一个 maxWaitMs，总延迟反而变长。 */
+    if (this._finalHint) { this._waitMs = this.opt.finalWaitMs; this._finalHint = false; }
+    else this._waitMs = this.opt.maxWaitMs;
+    const waitMs = this._waitMs;
+
     // 距离硬上限还剩多久
     const untilHard = Math.max(0, this.opt.hardMaxMs - sinceFirst);
     // 距离"算作停顿"还剩多久
-    const untilPause = Math.max(0, this.opt.maxWaitMs - sinceLast);
+    const untilPause = Math.max(0, waitMs - sinceLast);
 
     this.timer = setTimeout(() => {
       if (!this.buf || this.closed) return;
       const now = Date.now();
       if (now - this.firstCharAt >= this.opt.hardMaxMs) return this._force('hardTimeout');
-      if (now - this.lastCharAt >= this.opt.maxWaitMs) return this._force('pause');
+      if (now - this.lastCharAt >= waitMs) return this._force('pause');
       this._arm();
     }, Math.min(untilHard, untilPause) + 5);
   }
@@ -421,9 +445,11 @@ export class IncrementalQuestioner extends EventEmitter {
     this.busy = false;
     this.queue = [];              // 等待出题的块
     this.abort = null;            // 在途请求的取消句柄
+    this._warming = false;        // 预热请求在途
+    this.lastWarmup = null;       // 上一次预热的耗时与结果（给界面报数用）
     this.stats = {
       chunks: 0, dropped: 0, merged: 0, failed: 0, repeated: 0,
-      latency: [], draftLatency: [], answerChars: [],
+      latency: [], draftLatency: [], answerChars: [], warmupMs: null,
     };
   }
 
@@ -462,6 +488,74 @@ export class IncrementalQuestioner extends EventEmitter {
     }
     this.materialsDropped = s.length - MATERIAL_HARD_CAP;
     return s.slice(0, MATERIAL_HARD_CAP);
+  }
+
+  /**
+   * 预热：把「材料 + 系统提示词」这个稳定前缀先打进去，让网关侧的前缀缓存热起来。
+   *
+   * 为什么值这 1.5 秒：第一题永远比后面慢一截。实测同一场（`probe_latency_breakdown.mjs`）：
+   *   第 1 题 1347ms / 第 2 题 1369ms / 第 3 题 1482ms —— 这是缓存已经热的情况；
+   *   而真实语料那场冷启动时，第一块首字 2199ms、第二块起掉到 815/809ms。
+   *   差的那 1.3 秒全在「网关要把 1.7 万字材料读一遍并建缓存」上。
+   *
+   * 本方法是**故意浪费一次最便宜的请求**：max_tokens 设 1，让它只读不写。
+   * 花掉的是材料那点输入 token（有缓存命中价，且只一次），换回来的是
+   * 「面试官问第一个问题时，那道题不用再等冷启动」。
+   *
+   * 失败一律吞掉：预热是锦上添花，不能在它上面挂任何正确性。
+   * 传 materials 是为了覆盖「材料刚粘进来还没保存」这种顺序。
+   */
+  async warmup(materials) {
+    const mat = materials !== undefined ? this._capMaterials(materials) : this.materials;
+    if (!mat) return false;
+    if (this._warming) return false;
+    this._warming = true;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), Math.min(this.opt.timeoutMs, 12000));
+    const t0 = Date.now();
+    try {
+      const res = await fetch(`${this.opt.baseUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.opt.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.opt.model,
+          messages: [
+            {
+              role: 'system',
+              /* 必须和 _buildMessages 的 system 前缀**逐字一致**，否则缓存键
+                 对不上，这次预热等于白打。所以同样走 SYSTEM_PROMPT 替换，
+                 连 currentQuestion 的兜底文案都用同一句。 */
+              content: SYSTEM_PROMPT
+                .replace('{MATERIALS}', mat)
+                .replace('{CURRENT_QUESTION}',
+                  this.currentQuestion || '（面试官还没提问，候选人在自由陈述）'),
+            },
+            { role: 'user', content: '预热' },
+          ],
+          temperature: 0,
+          max_tokens: 1,        // 只要它把前缀读进去建好缓存，不要它写东西
+          stream: false,
+          ...(this.opt.disableThinking ? { enable_thinking: false } : {}),
+        }),
+        signal: ctl.signal,
+      });
+      const ms = Date.now() - t0;
+      // 成功与否不重要，把耗时记下来，界面上能看出预热到底帮上忙没
+      this.stats.warmupMs = ms;
+      this.lastWarmup = { at: t0, ms, ok: res.ok, status: res.status };
+      this.emit('warmup', this.lastWarmup);
+      return res.ok;
+    } catch (e) {
+      this.lastWarmup = { at: t0, ms: Date.now() - t0, ok: false, error: e.message };
+      this.emit('warmup', this.lastWarmup);
+      return false;
+    } finally {
+      clearTimeout(timer);
+      this._warming = false;
+    }
   }
 
   /**
@@ -811,6 +905,9 @@ export class IncrementalQuestioner extends EventEmitter {
       // 「我明明粘了 20 万字它怎么没看到后面」，而它其实是故意砍的。
       materialsChars: this.materials.length,
       materialsDropped: this.materialsDropped,
+      // 预热耗时。有它就说明「第一个问题为什么比别人快」是有据的，
+      // 没它也正常（还没粘材料时不该有）。
+      warmupMs: this.stats.warmupMs,
     };
   }
 }

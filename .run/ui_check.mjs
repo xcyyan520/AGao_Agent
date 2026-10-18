@@ -155,6 +155,40 @@ await sleep(1200);
 check('材料保存后字数仍显示', !(await evalJs('document.getElementById("matStat").textContent')).startsWith('0'),
   await evalJs('document.getElementById("matStat").textContent'));
 
+/* 保存成功之后必须有看得见的反馈。
+   ★ 这条是补的，起因是用户报「手机端点保存文档没反应」。
+     查下来功能一直是好的、请求 200、字数也更新了——问题在于反馈
+     被渲染进了 #feed 里的一行 12px 小字，而手机上抽屉是 position:fixed
+     盖住半屏，#feed 被压在下面还滚到了 2340px 处，那行字压根不在视口里。
+     现在是挂在 body 上的浮层 #toast。 */
+const toastInfo = await evalJs(`(() => {
+  const t = document.getElementById('toast');
+  if (!t) return { missing: true };
+  const r = t.getBoundingClientRect();
+  /* 层级得用 elementsFromPoint，而且必须临时把 pointer-events 打开：
+     toast 故意设了 none（不许吃点击），而命中测试会跳过 none 的元素，
+     不临时打开就只能测出假失败。 */
+  const prev = t.style.pointerEvents;
+  t.style.pointerEvents = 'auto';
+  const stack = document.elementsFromPoint(r.left + r.width/2, r.top + r.height/2);
+  t.style.pointerEvents = prev;
+  return {
+    text: t.textContent,
+    parent: t.parentElement.id || t.parentElement.tagName,
+    inView: r.top >= 0 && r.bottom <= innerHeight && r.width > 0,
+    onTop: stack[0] === t,
+    stack: stack.slice(0, 3).map(e => e.tagName + (e.id ? '#' + e.id : '')),
+    opacity: getComputedStyle(t).opacity,
+    pointer: getComputedStyle(t).pointerEvents
+  };
+})()`);
+check('保存后弹出提示条', !toastInfo.missing && !!toastInfo.text && toastInfo.opacity !== '0',
+  JSON.stringify(toastInfo.text));
+check('提示条挂在 body 上（不会被抽屉或 feed 埋掉）', toastInfo.parent === 'BODY', toastInfo.parent);
+check('提示条在视口里', toastInfo.inView, JSON.stringify(toastInfo));
+check('提示条在最上层（没被遮住）', toastInfo.onTop, (toastInfo.stack || []).join(' > '));
+check('提示条不吃点击', toastInfo.pointer === 'none', toastInfo.pointer);
+
 console.log('\n═══ 回放 ═══');
 const TRANSCRIPT = `我用了 Redis 的 DECR 做预减库存，然后发消息到 RocketMQ，下游异步落库。不过我们实际上没有做异步落库，是同步写库的，QPS 峰值大概 5000 左右。锁的话我们没怎么用分布式锁，因为 Redis 本身是单线程的。压测是压过的，就在本机上跑了一下 JMeter，具体数字记不太清了。`;
 check('逐字稿已填入', await setVal('#replayText', TRANSCRIPT));
@@ -463,10 +497,14 @@ if (!fs.existsSync(MIC_WAV)) {
     check('点「开始说话」后按钮变成正在说话', /正在说话/.test(started.label), started.label);
     check('按钮有记录中的样式', /on/.test(started.cls), started.cls);
 
-    // 服务端那一路要真的开起来
+    // 服务端那一条音轨要真的开起来。
+    // 查的是 tracks 里有没有一条 candidate 且 listening——不是查
+    // asr.candidate（那是单音轨时代的字段，已经没有了）。
     await sleep(1200);
     const live = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
-    check('服务端那一路识别已开', live.asr && live.asr.candidate === 'listening', JSON.stringify(live.asr));
+    const candTrack = (live.tracks || []).find(t => t.role === 'candidate');
+    check('服务端那条音轨已开', !!(candTrack && candTrack.listening),
+      candTrack ? `track=${candTrack.track} label=${candTrack.label}` : `tracks=${JSON.stringify(live.tracks)}`);
 
     // 等 WAV 放完、识别出字
     let micText = '';
@@ -480,6 +518,61 @@ if (!fs.existsSync(MIC_WAV)) {
       micText ? `「${micText.slice(0, 40)}」` : '一句都没识别出来');
     check('识别出来的内容像是那段话', /LangGraph|状态机|语言|模型/i.test(micText), micText.slice(0, 40));
 
+    /* ═══ 「有时候灵有时候不灵」：音轨在服务端掉了，前端要自己接回来 ═══
+       这是用户报的第三个问题。查到的主要暗路是：服务端那条音轨如果没了
+       （被重置、被顶掉、WS 僵住），/api/asr/feed 会**静默**返回 accepted:0
+       —— 它不报错，因为「点了停止之后还有半秒在途音频」是正常的。
+       而前端以前从不看这个字段，于是一边按钮亮着「正在说话」、一边
+       音频全被丢掉，用户看到的就是「有时候认得有时候一个字都不出」。
+
+       测法：麦克风开着的时候，从外面把那条音轨掐掉（等价于服务端重启，
+       或者另一台设备把它顶了），然后什么都不做，等前端自己发现并重连。 */
+    const beforeRevive = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+    const trk = (beforeRevive.tracks || []).find(t => t.role === 'candidate');
+    check('掉线测试前音轨是活的', !!(trk && trk.listening), JSON.stringify(trk || null));
+
+    await fetch(`${APP}/api/asr/stop`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: MIC_SESSION, track: trk.track })
+    });
+    await sleep(600);
+    const killed = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+    check('音轨已经被掐掉（模拟掉线）',
+      !(killed.tracks || []).some(t => t.track === trk.track && t.listening),
+      JSON.stringify(killed.tracks || []));
+
+    // 什么都不做，等前端自己发现（轮询 2 秒一轮 + 连丢 6 次音频块）
+    let revived = null;
+    for (let i = 0; i < 30; i++) {
+      await sleep(700);
+      const s = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+      const t2 = (s.tracks || []).find(t => t.track === trk.track);
+      if (t2 && t2.listening) { revived = t2; break; }
+    }
+    check('前端自己把音轨接回来了（没让人再点一次）', !!revived,
+      revived ? JSON.stringify(revived) : '等了 21 秒还是没动静');
+
+    // 接回来之后按钮必须还亮着，否则人会以为得重新点一次
+    const stillOn = await eval2('document.getElementById("btnMic").textContent');
+    check('接回来之后按钮仍然显示正在说话', /正在说话/.test(stillOn), stillOn);
+
+    /* 而且音频要真的又能进去。
+       ★ 这里不能等「识别出新句子」：假麦克风的 WAV 只有 7.5 秒，
+         早就放完了，后面全是静音，静音当然识别不出字。
+         看 bytes（服务端累计收到的音频字节）有没有继续涨就够了——
+         它涨说明这条连接真的在收，而不是只是状态字段显示 listening。 */
+    const b0 = ((await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json()))
+      .tracks || []).find(t => t.track === trk.track)?.bytes || 0;
+    let bytesGrew = 0;
+    for (let i = 0; i < 20; i++) {
+      await sleep(500);
+      const s = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+      const b1 = (s.tracks || []).find(t => t.track === trk.track)?.bytes || 0;
+      if (b1 > b0) { bytesGrew = b1 - b0; break; }
+    }
+    check('接回来之后音频真的又能送进去了', bytesGrew > 0,
+      bytesGrew ? `又收进了 ${bytesGrew} 字节` : `bytes 还是 ${b0}，连接没真的活过来`);
+
     // 点「停止」
     const stopped = await eval2(`(async () => {
       document.getElementById('btnMic').click();
@@ -490,8 +583,11 @@ if (!fs.existsSync(MIC_WAV)) {
 
     await sleep(900);
     const after = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
-    check('停下来之后服务端那一路也关了', after.asr && after.asr.candidate === 'off',
-      JSON.stringify(after.asr));
+    // 停了之后这条轨应该从表里消失（服务端 stopAsr 会 delete），
+    // 或者还在但 listening=false。两种都算关掉了。
+    const afterCand = (after.tracks || []).find(t => t.role === 'candidate');
+    check('停下来之后服务端那条轨也关了', !afterCand || afterCand.listening === false,
+      afterCand ? JSON.stringify(afterCand) : 'tracks 里已经没有了');
 
     // 角色切换
     const roleNow = await eval2(`(() => {
@@ -501,6 +597,111 @@ if (!fs.existsSync(MIC_WAV)) {
     })()`);
     check('能切成面试官', /面试官/.test(roleNow.who), roleNow.who);
     check('角色记在本地（刷新不丢）', roleNow.ls === 'interviewer', String(roleNow.ls));
+
+    /* ═══ 多音轨：页面上看得见「还有谁在听」 ═══
+       这一段验的是这次改造的核心承诺：
+       一个候选人 + 两个面试官同时在场时，每个人的音轨要在**所有**设备的
+       页面上都显示出来。以前只显示自己那一路，于是「另一个面试官已经在
+       听了」这件事在屏幕上没有任何痕迹——两个人会同时开口，或者都以为
+       对方没在听。 */
+    console.log('\n═══ 多音轨：谁在听 ═══');
+
+    /* 先把麦克风开回来。
+       前面那一段已经点过「停止」了，服务端把候选人那条轨删掉了——
+       所以此刻只有我自己没在听。不先开回来，这里就只剩两条面试官，
+       「自己那条被标出来」也就无从谈起（断言恒等于假）。 */
+    await eval2(`(async () => {
+      if (!document.getElementById('btnMic').textContent.includes('正在说话')) {
+        document.getElementById('btnMic').click();
+        for (let i = 0; i < 40; i++) {
+          await new Promise(r => setTimeout(r, 250));
+          if (document.getElementById('btnMic').textContent.includes('正在说话')) break;
+        }
+      }
+      return document.getElementById('btnMic').textContent;
+    })()`);
+
+    // 用 HTTP 直接开第二、第三个面试官（模拟另外两台设备）
+    for (const [track, label] of [['iv_testA', '张工'], ['iv_testB', '李工']]) {
+      await fetch(`${APP}/api/asr/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: MIC_SESSION, track, role: 'interviewer', label }),
+      });
+    }
+    // 让页面轮询把音轨表捞一次（2 秒一轮，等够）
+    await sleep(3000);
+
+    const pills = await eval2(`(() => {
+      const el = document.getElementById('trackList');
+      return {
+        has: !!el,
+        n: el ? el.querySelectorAll('.tpill').length : 0,
+        labels: Array.from(el ? el.querySelectorAll('.tpill b') : []).map(x => x.textContent),
+        mine: el ? el.querySelectorAll('.tpill.mine').length : 0
+      };
+    })()`);
+    check('页面上有音轨胶囊容器', pills.has);
+    check('三个人的音轨都显示出来了', pills.n >= 3, `实际 ${pills.n} 个：${pills.labels.join('/')}`);
+    check('两个面试官的名字都在', pills.labels.includes('张工') && pills.labels.includes('李工'),
+      pills.labels.join('/'));
+    check('自己那条被标出来了', pills.mine >= 1, `mine=${pills.mine}`);
+
+    /* 换角色不该把麦克风断掉。
+       以前这里是 stopMic() 再 startMic()，实测 2~3 秒空白，
+       而那两三秒正好卡在「他刚说完一句、你要接话」的地方。
+       现在只换标签，采集一秒都不断。
+
+       ★ 两个坑（都是我的测试写错，不是产品 bug）：
+         1. 不能无条件 click btnMic —— 上一段已经把麦克风开着了，
+            再点一下是「停止」。必须先看按钮文案再决定点不点。
+         2. `before` 不能在 stopMic 还没收尾时读。stopMic 是异步的：
+            它同步地把 micRunning 置 false，但要 await 完 /api/asr/stop
+            才调 syncMicUI()，中间那几百毫秒按钮还写着「正在说话」。
+            照着旧文案断言，等于在测一个幻觉。 */
+    const switched = await eval2(`(async () => {
+      const btn = document.getElementById('btnMic');
+      const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+      // 确保开着的（已开就不要碰，点一下反而是关）
+      if (!btn.textContent.includes('正在说话')) {
+        btn.click();
+        for (let i = 0; i < 40; i++) {
+          await sleepMs(250);
+          if (btn.textContent.includes('正在说话')) break;
+        }
+      }
+      // 等按钮状态彻底落定再记录
+      for (let i = 0; i < 8; i++) {
+        await sleepMs(200);
+        if (btn.textContent.includes('正在说话')) break;
+      }
+      const before = btn.textContent;
+
+      document.getElementById('btnRole').click();
+      await sleepMs(1200);
+      return {
+        before,
+        after: btn.textContent,
+        who: document.getElementById('micWho').textContent,
+        mine: (trackState.find(t => t.track === myTrack) || {}).role || null
+      };
+    })()`);
+    check('换角色前麦克风确实是开着的', /正在说话/.test(switched.before), switched.before);
+    check('换角色后麦克风还在开（没断）', /正在说话/.test(switched.after),
+      `${switched.before} -> ${switched.after}`);
+    check('换角色后身份跟着变', /面试者|候选人/.test(switched.who), switched.who);
+
+    // 那个新开的面试官音轨这会儿应该还在（换角色不该顺手关掉别人的）
+    const st2 = await fetch(`${APP}/api/state?s=${MIC_SESSION}`).then(r => r.json());
+    const ivs = (st2.tracks || []).filter(t => t.label === '张工' || t.label === '李工');
+    check('换角色没把别人的音轨关掉', ivs.length === 2, `还剩 ${ivs.length} 条`);
+
+    // 收尾：把这些探针音轨关掉，别在服务端留一堆空连接白烧额度
+    for (const t of (st2.tracks || [])) {
+      await fetch(`${APP}/api/asr/stop`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: MIC_SESSION, track: t.track }),
+      }).catch(() => {});
+    }
 
     check('麦克风这段没有 JS 异常', jsErr2.length === 0, jsErr2[0] || '');
 

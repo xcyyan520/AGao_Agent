@@ -154,6 +154,24 @@ export function openStore(dbPath = DB_PATH) {
     CREATE INDEX IF NOT EXISTS idx_sessions_time ON sessions(updated_at DESC);
   `);
 
+  /* ── 轻量迁移 ────────────────────────────────────────────────────────
+     CREATE TABLE IF NOT EXISTS 只在表不存在时生效，给已有表加列它不会管。
+     而 data/app.db 是用户机器上真实存着东西的库，不能靠「删库重建」解决。
+     所以这里按需 ALTER，跑几十次也只是查一次表结构。
+
+     为什么 lines 要加 track/label：
+       一场面试可能有 1 个候选人 + 多个面试官，每人一条音轨（见 server.mjs
+       的 tracks）。只存 role 的话，加载历史时三个面试官说的话全变成
+       同一个「面试官」，复盘时分不清是谁问的。 */
+  const ensureColumn = (table, column, ddl) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!cols.some(c => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+    }
+  };
+  ensureColumn('lines', 'track', 'track TEXT');
+  ensureColumn('lines', 'label', 'label TEXT');
+
   const now = () => Date.now();
 
   const api = {
@@ -256,8 +274,10 @@ export function openStore(dbPath = DB_PATH) {
       const t = String(line?.text || '').trim();
       if (!t) return null;
       const role = line.role === 'interviewer' ? 'interviewer' : 'candidate';
-      const r = db.prepare('INSERT INTO lines (session_id, role, text, at) VALUES (?,?,?,?)')
-        .run(sid, role, t, Number(line.at) || now());
+      const r = db.prepare('INSERT INTO lines (session_id, role, text, at, track, label) VALUES (?,?,?,?,?,?)')
+        .run(sid, role, t, Number(line.at) || now(),
+          line.track == null ? null : String(line.track),
+          line.label == null ? null : String(line.label));
       api.touchSession(sid);
       return Number(r.lastInsertRowid);
     },

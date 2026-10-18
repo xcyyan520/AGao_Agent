@@ -95,16 +95,29 @@ function newSession(id, conf = {}) {
     replayAbort: false,
     hydrated: false,      // 这场是不是已经从库里恢复过了（避免每轮请求都恢复一次）
 
-    /* ── 语音识别 ──
-       每个角色一路连接（面试官 / 候选人各一台设备各一个麦克风）。
-       两个人的声音从采集端就分开了，所以**不需要声纹分离**——
-       谁连上来的就标谁，这比任何 diarization 都准。 */
-    asr: { candidate: null, interviewer: null },
-    // 还没定稿的中间结果，只用来刷屏，绝不拿去出题（它会变）。
+    /* ── 语音识别：按【音轨】开连接，不按【角色】 ──
+       一条音轨 = 一台设备的麦克风。每条音轨有自己的 id、角色和标签。
+
+       ★ 为什么从「两个固定角色槽」改成「任意多条音轨」：
+         原来这里只有 { candidate, interviewer } 两个槽，同一角色开第二路
+         会走 startAsr 里的 stopAsr 把第一路顶掉。症状非常迷惑：
+         两个人各自选了「面试官」，后点的那个人一开口，前一个人的音轨就
+         无声无息地死了——他那边按钮还亮着、页面还显示「聆听中」，
+         但说出来的话一句都不进对话流。这就是「语音时灵时不灵」的一大来源。
+
+         而且原来的设计逼着人频繁切角色：一个候选人 + 两个面试官（一面
+         二面同时在场）时，第二个人必须先把第一个人的角色抢过来。切换要
+         停麦、重开 WS、重连识别，整套两三秒——正好卡在「他刚说完一句、
+         你要接话」的节奏上。
+
+         现在：面试官可以有任意多条音轨，各自独立、互不干扰；
+         切换角色只改这条音轨的标签，不重连。 */
+    tracks: new Map(),    // trackId -> { id, role, label, stream, bytes, startedAt }
+    // 还没定稿的中间结果，按音轨记。只用来刷屏，绝不拿去出题（它会变）。
     live: {},
-    // 面试官说的话先攒在这里，等他真的停下来再当成一个问题发出去。
-    qBuf: '',
-    qTimer: null,
+    // 面试官说的话先攒在这里（按音轨分别攒），等他真的停下来再当成一个问题发出去。
+    qBuf: new Map(),      // trackId -> 待提交的问题文本
+    qTimer: new Map(),    // trackId -> 防抖定时器
   };
 
   s.judge = new IncrementalQuestioner(s.conf);
@@ -146,6 +159,10 @@ function newSession(id, conf = {}) {
         s.transcript = data.lines.slice(-200).map(l => ({
           role: l.role === 'interviewer' ? 'interviewer' : 'candidate',
           text: l.text, at: l.at, final: true,
+          // 音轨标签也恢复：页面上要能分清「是哪个面试官说的」。
+          // 老数据没有这两列，就退回 null，界面按角色显示即可。
+          track: l.track || null,
+          label: l.label || null,
         }));
       }
       // 库里没有这一场就建一行，否则后面 addTurn/addSuggestion 的
@@ -292,11 +309,15 @@ function asrKey() {
 
 /** 往对话流里加一行，并且推给所有设备。
  *  persist 决定要不要落库——候选人那一路是切块器写库的（见 chunk 事件），
- *  从这里再写一遍就会重复，所以它传 false。 */
-function addTranscriptLine(s, role, text, { persist = true } = {}) {
+ *  从这里再写一遍就会重复，所以它传 false。
+ *  track / label 只用于界面上区分「是哪个麦克风说的」——
+ *  三个面试官各说一句时，光看 role 分不出是谁。 */
+function addTranscriptLine(s, role, text, { persist = true, track = null, label = null } = {}) {
   const t = String(text || '').trim();
   if (!t) return null;
   const line = { role, text: t, at: Date.now(), final: true };
+  if (track) line.track = track;
+  if (label) line.label = label;
   s.transcript.push(line);
   // 只留最近 200 条：面板最多显示这么多，再多只是占内存
   if (s.transcript.length > 200) s.transcript.splice(0, s.transcript.length - 200);
@@ -308,7 +329,7 @@ function addTranscriptLine(s, role, text, { persist = true } = {}) {
 /** 一句话定稿后要做的事，按角色分岔。
  *  这是整个语音方案的分水岭：同样一句识别结果，
  *  面试官说的要去当「问题」，候选人说的要去当「回答」。 */
-function onAsrFinal(s, role, text) {
+function onAsrFinal(s, role, text, track = null, label = null) {
   if (role === 'candidate') {
     /* 候选人的话 = 回答。走和「模拟回放」完全一样的切块入口，
        这样接真麦克风之后，切块策略、背压合并、出题链路全都不用改。
@@ -318,25 +339,36 @@ function onAsrFinal(s, role, text) {
          如果在两处都写，接麦克风时同一句话会在历史里出现两遍——
          一遍是 ASR 定稿的整句，一遍是切块器重新切的块。
          但它【要】进对话流：面板上得实时看见他在说什么。 */
-    addTranscriptLine(s, 'candidate', text, { persist: false });
-    s.chunker.push(text);
+    addTranscriptLine(s, 'candidate', text, { persist: false, track, label });
+    /* `{ final: true }` 是延迟优化的关键一环：这是 ASR 的【定稿】，
+       说话人此刻已经停了。切块器看到这个标志就把兜底等待从 700ms
+       缩到 200ms（DEFAULT_CHUNKER.finalWaitMs），不必再假设「后面还有字」。
+       回放那条路径传的是 false —— 文本是匀速喂的，没人真的停下来。 */
+    s.chunker.push(text, { final: true });
     return;
   }
 
   /* 面试官的话 = 问题。
      不逐句当问题：他可能先「嗯，好」再说正事，逐句发会把「嗯」也
      当成一个问题记进历史，污染跨场记忆。
-     先攒起来，停顿 800ms 再一起发——他真要问的时候会连着说完一句。 */
-  addTranscriptLine(s, 'interviewer', text, { persist: true });
-  s.qBuf = (s.qBuf ? s.qBuf + text : text).trim();
-  clearTimeout(s.qTimer);
-  s.qTimer = setTimeout(() => {
-    const q = s.qBuf.trim();
-    s.qBuf = '';
+     先攒起来（按音轨分别攒），停顿 800ms 再一起发——他真要问的时候
+     会连着说完一句。
+     ★ 必须按音轨分别攒：两个人几乎同时开口时，共用一个 qBuf 会把
+       甲的后半句接到乙的前半句上，搓出一句谁都没说过的问题。 */
+  addTranscriptLine(s, 'interviewer', text, { persist: true, track, label });
+  const key = track || 'interviewer';
+  const prev = s.qBuf.get(key) || '';
+  s.qBuf.set(key, (prev ? prev + text : text).trim());
+  clearTimeout(s.qTimer.get(key));
+  const timer = setTimeout(() => {
+    const q = (s.qBuf.get(key) || '').trim();
+    s.qBuf.delete(key);
+    s.qTimer.delete(key);
     if (q.length < 2) return;         // 「嗯」「好」这种不算问题
     askAsrQuestion(s, q);
   }, ASR_QUESTION_DEBOUNCE_MS);
-  s.qTimer.unref?.();
+  timer.unref?.();
+  s.qTimer.set(key, timer);
 }
 
 /** 把面试官亲口说出来的那句话，当成一个正式的提问处理。
@@ -352,68 +384,172 @@ async function askAsrQuestion(s, q) {
        页面上会出现两条一模一样的「你实际问出口了」。
        这个 bug 特别隐蔽：两处代码单独看都是对的，只有连起来才重复。 */
     await s.judge.newQuestion(q);
+    // 和 /api/question 那条路一样：换了问题就把提示词尾巴补热
+    s.judge.warmup().catch(() => {});
   } catch (e) {
     console.error('[asr:question]', e.message);
   }
 }
 
-/** 停掉某个角色的识别连接。可重复调用（没开就是空操作）。 */
-async function stopAsr(s, role) {
-  const a = s.asr[role];
-  if (!a) return false;
-  s.asr[role] = null;
-  s.live[role] = '';
-  try {
-    const lines = await a.stop();
-    console.log(`[asr:${role}] 停了，${a.bytes} 字节音频 / ${lines.length} 句`);
-  } catch (e) {
-    console.error(`[asr:${role}] 停止时出错：`, e.message);
+/* ── 音轨（一台设备一条） ──
+ *
+ * ★ 为什么音轨 id 由**客户端**生成并保存到 localStorage：
+ *   刷新页面、断网重连之后要能接回原来那条音轨。用服务端随机 id 的话，
+ *   刷新一次就变成一条新音轨，页面上会冒出「面试官 2」「面试官 3」，
+ *   而旧的几条还挂在服务端白烧额度（它们没有音源，但 WS 还开着）。
+ *   客户端持 id，服务端就永远只有真实存在的那么几条。
+ */
+
+/** 取一条音轨。没有就返回 null。 */
+function getTrack(s, trackId) {
+  return s.tracks.get(trackId) || null;
+}
+
+/** 这条音轨上现在有没有活着的识别连接。 */
+function isListening(s, trackId) {
+  const t = s.tracks.get(trackId);
+  return !!(t && t.stream);
+}
+
+/** 通知所有设备「音轨列表变了」。
+ *  单独一个事件而不是塞进 asr_state：前端要的是**整张表**，
+ *  不是某一条的增量——两台设备各自维护自己的视图时，增量很容易对不齐。
+ *  （实测过的坑：只推增量的话，一台设备关掉麦克风后另一台还在显示
+ *   「面试官 2 聆听中」，而那条音轨早就没了。） */
+function broadcastTracks(s) {
+  send(s, 'asr_tracks', { tracks: trackList(s) });
+}
+
+/** 把 Map 转成前端好用的数组，附带每个人现在说到哪了。 */
+function trackList(s) {
+  const out = [];
+  for (const t of s.tracks.values()) {
+    out.push({
+      track: t.id,
+      role: t.role,
+      label: t.label,
+      listening: !!t.stream,
+      live: s.live[t.id] || '',
+      bytes: t.bytes || 0,
+      startedAt: t.startedAt || null,
+    });
   }
-  send(s, 'asr_state', { role, state: 'stopped' });
+  // 候选人的排前面：页面上「谁在回答」比「谁在问」更值得先看一眼
+  out.sort((a, b) => (a.role === b.role ? (a.startedAt || 0) - (b.startedAt || 0) : a.role === 'candidate' ? -1 : 1));
+  return out;
+}
+
+/** 停掉一条音轨的识别连接，并把音轨本身删掉。
+ *  可重复调用（没开就是空操作）。 */
+async function stopAsr(s, trackId) {
+  const t = s.tracks.get(trackId);
+  if (!t) return false;
+  s.tracks.delete(trackId);
+  s.live[trackId] = '';
+  const pending = s.qTimer.get(trackId);
+  if (pending) { clearTimeout(pending); s.qTimer.delete(trackId); }
+  s.qBuf.delete(trackId);
+
+  if (t.stream) {
+    try {
+      const lines = await t.stream.stop();
+      console.log(`[asr:${trackId}] 停了（${t.role}），${t.stream.bytes} 字节音频 / ${lines.length} 句`);
+    } catch (e) {
+      console.error(`[asr:${trackId}] 停止时出错：`, e.message);
+    }
+  }
+  send(s, 'asr_state', { track: trackId, role: t.role, state: 'stopped' });
+  broadcastTracks(s);
   return true;
 }
 
-/** 开一路识别。已经开着就先停掉再重开（用户连点两次「开始」不该报错）。 */
-async function startAsr(s, role) {
-  await stopAsr(s, role);
+/** 开一条音轨（或复用已存在的）。
+ *
+ *  ★ 关键行为：同一条音轨重复点「开始」= 幂等，不重连。
+ *    以前这里是「先 stopAsr 再新建」，于是连点两下就会把正在用的连接
+ *    拆了重建一次，中间那两三秒说的话全丢——而按钮看起来一直是「聆听中」。
+ *    这是「语音时灵时不灵」的另一个来源。
+ *
+ *  ★ 换角色也不重连：role 只是这条音轨的标签，改标签不影响已经在跑的
+ *    识别连接。原来切一次角色要停麦、重开 WS，两三秒的空白正好卡在
+ *    「他刚说完一句、你要接话」的节奏上。 */
+async function startAsr(s, { track, role = 'candidate', label = null, force = false } = {}) {
+  const trackId = String(track || role);
+  const role0 = role === 'interviewer' ? 'interviewer' : 'candidate';
+
+  const existing = s.tracks.get(trackId);
+  if (existing) {
+    // 已有音轨：更新标签，不碰连接
+    existing.role = role0;
+    if (label) existing.label = label;
+    if (existing.stream && !force) {
+      send(s, 'asr_state', { track: trackId, role: role0, state: 'listening' });
+      broadcastTracks(s);
+      return { ok: true, reused: true, track: trackId };
+    }
+    // force，或者这条音轨没有活连接（上次失败了）：走下面的重建
+    if (existing.stream) await existing.stream.stop().catch(() => {});
+    existing.stream = null;
+  }
 
   const key = asrKey();
   if (!key) {
     const msg = '没有可用的 API Key：设置 ASR_KEY，或把模型 Key 配好（两者可以是同一个）';
-    send(s, 'asr_state', { role, state: 'error', message: msg });
+    send(s, 'asr_state', { track: trackId, role: role0, state: 'error', message: msg });
     return { ok: false, error: msg };
   }
 
   const a = new AsrStream({ apiKey: key });
-  s.asr[role] = a;
+  const rec = existing || { id: trackId, role: role0, label: label || role0, bytes: 0, startedAt: Date.now() };
+  rec.role = role0;
+  if (label) rec.label = label;
+  rec.stream = a;
+  rec.startedAt = rec.startedAt || Date.now();
+  rec.bytes = 0;
+  s.tracks.set(trackId, rec);
 
   a.on('interim', p => {
     // 中间结果只刷屏，绝不进切块/出题——它下一秒就会变。
-    s.live[role] = p.text;
-    send(s, 'asr_live', { role, text: p.text });
+    s.live[trackId] = p.text;
+    send(s, 'asr_live', { track: trackId, role: rec.role, text: p.text });
   });
   a.on('final', p => {
-    s.live[role] = '';
-    onAsrFinal(s, role, p.text);
+    s.live[trackId] = '';
+    rec.bytes = a.bytes;
+    onAsrFinal(s, rec.role, p.text, trackId, rec.label);
+    // 每定稿一句推一次进度：调用方要靠它显示「已经听到多少字」，
+    // 否则人分不清「没开麦」和「开了但一直没识别到」。
+    send(s, 'asr_live', { track: trackId, role: rec.role, text: '', final: p.text });
   });
   a.on('error', p => {
-    console.error(`[asr:${role}]`, p.error.message);
-    send(s, 'asr_state', { role, state: 'error', message: p.error.message });
+    console.error(`[asr:${trackId}]`, p.error.message);
+    send(s, 'asr_state', { track: trackId, role: rec.role, state: 'error', message: p.error.message });
   });
   a.on('closed', () => {
-    if (s.asr[role] === a) { s.asr[role] = null; send(s, 'asr_state', { role, state: 'closed' }); }
+    // 只有仍然是当前连接时才动状态：被替换掉的旧连接晚到的 closed
+    // 不该把新音轨标成「已关闭」（那会让按钮骗人）。
+    const cur = s.tracks.get(trackId);
+    if (cur && cur.stream === a) {
+      cur.stream = null;
+      s.live[trackId] = '';
+      send(s, 'asr_state', { track: trackId, role: cur.role, state: 'closed' });
+      broadcastTracks(s);
+    }
   });
 
-  send(s, 'asr_state', { role, state: 'connecting' });
+  send(s, 'asr_state', { track: trackId, role: role0, state: 'connecting' });
   try {
     await a.start();
   } catch (e) {
-    s.asr[role] = null;
-    send(s, 'asr_state', { role, state: 'error', message: e.message });
+    const cur = s.tracks.get(trackId);
+    if (cur && cur.stream === a) cur.stream = null;
+    send(s, 'asr_state', { track: trackId, role: role0, state: 'error', message: e.message });
+    broadcastTracks(s);
     return { ok: false, error: e.message };
   }
-  send(s, 'asr_state', { role, state: 'listening' });
-  return { ok: true };
+  send(s, 'asr_state', { track: trackId, role: role0, state: 'listening' });
+  broadcastTracks(s);
+  return { ok: true, track: trackId };
 }
 
 /** 面试官停顿多久算「问完了」。太短会把一句话拆成两个问题，
@@ -526,15 +662,16 @@ const server = http.createServer(async (req, res) => {
            面试官和候选人各看一台屏幕，靠这几项保持一致：
            - transcript：已经定稿的对话流（谁说的、说了什么、什么时候）
            - live：还没定稿的中间结果，只用来显示「他正在说…」
-           - asr：每一路识别的状态，决定按钮显示「开始」还是「听写中」
+           - tracks：每一路麦克风的完整状态表（见下）
            注意 transcript 是【全量】的：一场面试几百句，几十 KB，
            两秒拉一次没有压力，而且省掉了增量同步的复杂度。 */
         transcript: s.transcript,
         live: s.live,
-        asr: {
-          candidate: s.asr.candidate ? 'listening' : 'off',
-          interviewer: s.asr.interviewer ? 'listening' : 'off',
-        },
+        /* ★ tracks 是数组，不是 {candidate, interviewer} 两个槽。
+           因为一场面试可能是 1 个候选人 + 多个面试官，每人一条音轨；
+           用固定两个槽时，第二个面试官一开口就把第一个顶掉（表现为
+           「A 说完 B 说，A 的麦克风就自己关了」）。 */
+        tracks: trackList(s),
       }));
     }
 
@@ -600,38 +737,57 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* ── 语音识别 ──
-       三个端点：开、喂音频、停。
+       四个端点：开、喂音频、停、列音轨。
        音频用 POST 原始字节（不经 base64）：一秒钟的 16k 单声道 PCM 是 32KB，
-       base64 之后变 43KB 而且要多一次编解码。每 250ms 一发，不值得。 */
+       base64 之后变 43KB 而且要多一次编解码。每 250ms 一发，不值得。
+
+       ★ 音轨 id 由客户端给（body.track），不是服务端分配。
+         这样刷新页面、断网重连后能接回同一条，不会在页面上冒出
+         「面试官 2」「面试官 3」而旧的几条还挂在服务端白烧额度。 */
     if (p === '/api/asr/start' && req.method === 'POST') {
       const body = await readBody(req);
       const s = getSession(body.session || 'default');
-      const role = body.role === 'interviewer' ? 'interviewer' : 'candidate';
-      const r = await startAsr(s, role);
+      const r = await startAsr(s, {
+        track: body.track || body.role,
+        role: body.role,
+        label: body.label,
+        force: !!body.force,
+      });
       res.writeHead(r.ok ? 200 : 500, { 'Content-Type': MIME['.json'] });
       return res.end(JSON.stringify(r));
     }
 
     if (p === '/api/asr/feed' && req.method === 'POST') {
       const s = getSession(url.searchParams.get('s') || 'default');
-      const role = url.searchParams.get('role') === 'interviewer' ? 'interviewer' : 'candidate';
-      const a = s.asr[role];
+      const trackId = url.searchParams.get('track') || url.searchParams.get('role') || 'candidate';
+      const a = getTrack(s, trackId);
       const buf = await readRaw(req);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      // 没开着识别就静默丢弃。这里报错没意义：用户点了「停止」之后，
-      // 浏览器那边还有半秒在途的音频块，那是正常的收尾。
-      if (!a || !buf.length) return res.end(JSON.stringify({ ok: true, accepted: 0 }));
-      const ok = a.push(buf);
+      /* 没开着识别就静默丢弃。这里报错没意义：用户点了「停止」之后，
+         浏览器那边还有半秒在途的音频块，那是正常的收尾。
+         另一个常见情形是多设备：两台都以为自己是候选人，其中一台的音轨
+         被另一台覆盖了，它继续往一条已经不存在的轨上推——静默丢弃
+         比让那台设备弹红字好，它其实什么事都没做错。 */
+      if (!a || !a.stream || !buf.length) return res.end(JSON.stringify({ ok: true, accepted: 0 }));
+      const ok = a.stream.push(buf);
+      a.bytes = a.stream.bytes;
       return res.end(JSON.stringify({ ok: true, accepted: ok ? buf.length : 0 }));
     }
 
     if (p === '/api/asr/stop' && req.method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       const s = getSession(body.session || url.searchParams.get('s') || 'default');
-      const role = (body.role || url.searchParams.get('role')) === 'interviewer' ? 'interviewer' : 'candidate';
-      await stopAsr(s, role);
+      const trackId = body.track || body.role || url.searchParams.get('track') || url.searchParams.get('role') || 'candidate';
+      await stopAsr(s, trackId);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true }));
+      return res.end(JSON.stringify({ ok: true, tracks: trackList(s) }));
+    }
+
+    /* 只读：让任何一台设备随时能把音轨表拿全（SSE 断了也有兜底）。 */
+    if (p === '/api/asr/tracks') {
+      const s = getSession(url.searchParams.get('s') || 'default');
+      res.writeHead(200, { 'Content-Type': MIME['.json'] });
+      return res.end(JSON.stringify({ ok: true, tracks: trackList(s) }));
     }
 
     /* ── 面试官提问：开一个新问题，记忆保留 ── */
@@ -652,7 +808,14 @@ const server = http.createServer(async (req, res) => {
       }
       await s.judge.newQuestion(q);
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true }));
+      /* 换了问题就再预热一次。
+         当前问题是系统提示词的**最后一行**，前面前缀（材料那一大段）是
+         逐字不变的，所以这次预热只需要把尾巴补进去，很便宜。
+         值得做的理由：面试官问完问题到候选人开口，中间通常有几秒
+         （他在思考），这几秒正好把缓存补热，下一块出题就能走缓存。 */
+      if (q.trim()) s.judge.warmup().catch(() => {});
+      return;
     }
 
     /* ── 材料：逐字稿 / 项目资料，AI 判断的唯一依据 ── */
@@ -676,12 +839,19 @@ const server = http.createServer(async (req, res) => {
       /* chars 是【实际进提示词】的字数，dropped 是被上限砍掉的。
          两个都给出来：只报 chars 会让人以为材料完整吃进去了，
          而后面的题目质量对不上他手上那份 20 万字的稿子。 */
-      return res.end(JSON.stringify({
+      res.end(JSON.stringify({
         ok: true,
         chars: s.judge.materials.length,
         dropped: s.judge.materialsDropped || 0,
         materialId: s.materialId ?? null,
       }));
+      /* 材料一进来就立刻预热前缀缓存，不等面试官先开口。
+         这是白赚的：人粘完材料总要去泡杯水、跟候选人打个招呼，
+         那几秒足够把 1.7 万字的系统前缀打进网关。等第一个问题来了，
+         首字就不用再等冷启动（实测冷 2199ms / 热 815ms）。
+         不 await，失败也无所谓 —— warmup 自己吞掉所有异常。 */
+      if (text.trim()) s.judge.warmup().catch(() => {});
+      return;
     }
 
     /* ── 材料库 ──
@@ -709,12 +879,15 @@ const server = http.createServer(async (req, res) => {
       s.materialId = m.id;
       dbWrite(st => st.ensureSession(s.id, m.id), 'ensureSession');
       res.writeHead(200, { 'Content-Type': MIME['.json'] });
-      return res.end(JSON.stringify({
+      res.end(JSON.stringify({
         ok: true,
         chars: s.judge.materials.length,
         dropped: s.judge.materialsDropped || 0,
         name: m.name,
       }));
+      // 和 /api/materials 一样：换材料等于换了前缀，缓存要重打
+      s.judge.warmup().catch(() => {});
+      return;
     }
 
     if (p === '/api/materials/delete' && req.method === 'POST') {
@@ -802,9 +975,11 @@ const server = http.createServer(async (req, res) => {
       const title = String(body.title || '').trim().slice(0, 80);
       const old = sessions.get(id);
       if (old) {
-        // 重置时要把两路识别都关掉，否则那两条 WebSocket 会一直挂着
-        // 往一个已经没人看的会话里灌音频，白烧额度。
-        for (const role of ['candidate', 'interviewer']) await stopAsr(old, role);
+        /* 重置时要把所有音轨都关掉，否则那几条 WebSocket 会一直挂着
+           往一个已经没人看的会话里灌音频，白烧额度。
+           注意是遍历全部音轨，不是只关候选人和面试官两条——
+           现在一场里可能有好几个面试官各占一条。 */
+        for (const trackId of [...old.tracks.keys()]) await stopAsr(old, trackId);
         for (const r of old.clients) { try { r.end(); } catch (_) {} }
       }
       // 给刚结束的这场起名。库里有行就改行；没有行先建一行再起名。

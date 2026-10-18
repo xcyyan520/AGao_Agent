@@ -545,6 +545,87 @@ console.log('\n【12】材料长度上限');
     m[0].content.length < MATERIAL_HARD_CAP + 4000, `${m[0].content.length} 字符`);
 }
 
+/* ══【13】前缀缓存预热 ══════════════════════════════════════════════
+   为什么要有这一段：预热是一个「故意浪费一次最便宜的请求」的优化，
+   它一旦写错就会悄悄变成一次有副作用的完整调用——把 max_tokens 改大了，
+   每粘一次材料就白烧一份回答的 token；或者把 messages 形状写歪了，
+   缓存打不中却看不出来。所以下面既验「发了什么」，也验「没发什么」。 */
+console.log('\n【13】前缀缓存预热');
+{
+  /* 桩服务：只回一个极简的 chat completion，把收到的请求体交出来。
+     注意 handler 签名是 (req, res, body)，body 已经是解析好的对象。 */
+  let seen = [];
+  const srv = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', c => { raw += c; });
+    req.on('end', () => {
+      let body = {};
+      try { body = JSON.parse(raw); } catch (_) {}
+      seen.push({ body, auth: req.headers.authorization });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: '问题：预热的桩\n理由：桩\n类型：追问\n依据：桩' }, finish_reason: 'stop' }],
+      }));
+    });
+  });
+  await new Promise(r => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+
+  const q = new IncrementalQuestioner({
+    baseUrl: `http://127.0.0.1:${port}`,
+    apiKey: 'k-test',
+    model: 'm-test',
+    disableThinking: true,
+  });
+  q.on('error', () => {});
+
+  ok('没材料时不预热', (await q.warmup()) === false);
+  ok('没材料时一个请求都不发', seen.length === 0, String(seen.length));
+
+  q.setContext({ materials: '材料正文 ABC', currentQuestion: '你负责哪块？' });
+  const r = await q.warmup();
+  ok('有材料时预热返回成功', r === true);
+  ok('预热真的发了请求', seen.length === 1);
+
+  const b = seen[0].body;
+  ok('预热的 max_tokens 是 1（只要它读，不要它写）', b.max_tokens === 1, String(b.max_tokens));
+  ok('预热不流式', b.stream === false);
+  ok('预热的 temperature 是 0', b.temperature === 0);
+  ok('预热带上了 API Key', seen[0].auth === 'Bearer k-test', String(seen[0].auth));
+  ok('预热关掉了思考（否则 max_tokens=1 会被思考吃光）', b.enable_thinking === false);
+  ok('预热的 system 里真有材料', String(b.messages[0].content).includes('材料正文 ABC'));
+  ok('预热的 system 里带着当前问题', String(b.messages[0].content).includes('你负责哪块？'));
+  ok('预热只发两条消息（system + 一句占位）', b.messages.length === 2, String(b.messages.length));
+
+  /* ★ 最关键的一条：预热的 system 前缀必须和真请求【逐字一致】。
+     不一致的话缓存键对不上，这次预热就是白打——而这个错误肉眼看不出来，
+     只会表现为「预热跑了，但一点没变快」。 */
+  const real = q._buildMessages({ seq: 1, text: '他刚说了一句' });
+  ok('预热的 system 前缀与真请求逐字一致',
+    b.messages[0].content === real[0].content,
+    `预热 ${b.messages[0].content.length} 字符 / 真请求 ${real[0].content.length} 字符`);
+
+  // 耗时与结果要能被读出来，否则界面上没法判断预热到底帮上忙没
+  ok('预热耗时被记下来', typeof q.stats.warmupMs === 'number' && q.stats.warmupMs >= 0, String(q.stats.warmupMs));
+  ok('summary() 带出预热耗时', q.summary().warmupMs === q.stats.warmupMs);
+  ok('预热结果落在 lastWarmup 上', q.lastWarmup && q.lastWarmup.ok === true);
+
+  /* 并发保护：页面连点两次保存材料会发两次预热。
+     两次请求抢同一个前缀毫无意义，还多烧一份 token，所以要挡住。 */
+  const before = seen.length;
+  await Promise.all([q.warmup(), q.warmup(), q.warmup()]);
+  ok('同时多次预热只发一次', seen.length - before <= 1, `多发了 ${seen.length - before - 1} 次`);
+
+  /* 上游挂了不能把预热变成错误源：它只是优化，不能有任何正确性依赖。 */
+  const dead = new IncrementalQuestioner({ baseUrl: 'http://127.0.0.1:1', apiKey: 'k', timeoutMs: 500 });
+  dead.on('error', () => {});
+  dead.setContext({ materials: '材料' });
+  ok('上游连不上时预热返回 false 而不是抛错', (await dead.warmup()) === false);
+  ok('上游连不上时 lastWarmup 记着失败', dead.lastWarmup && dead.lastWarmup.ok === false);
+
+  srv.close();
+}
+
 /* ══════════════════════════════════════════════════════════════════════ */
 console.log('\n' + '─'.repeat(60));
 if (fail === 0) {

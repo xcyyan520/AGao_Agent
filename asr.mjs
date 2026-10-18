@@ -41,6 +41,20 @@ export const DEFAULT_ASR = {
   model: process.env.ASR_MODEL || 'fun-asr-realtime',
   sampleRate: 16000,
   format: 'pcm',
+  /* ★ 一句话说完之后，服务端要等多久的静音才「定稿」。
+   *
+   * 这是整条链路里**最容易被忽略的一段延迟**：它不在我们的代码里，
+   * 但人感觉到的是「我说完了，屏幕上要过一会儿才出字」。
+   *
+   * 阿里云默认 1300ms。对录音转写无所谓，对「边说边出题」就很贵——
+   * 面试官一停嘴，AI 要多等 1.3 秒才知道这句话说完了，这 1.3 秒
+   * 后面还要再叠上大模型的 1~2 秒首字延迟。
+   *
+   * 压到 600ms：定稿提前约 0.7 秒，而 600ms 的停顿在正常对话里
+   * 已经算是「说完了」（句中的换气一般 200~400ms）。
+   * 若发现长句被切成两段（上一段末尾缺标点就定稿了），往回调大即可：
+   * 环境变量 ASR_MAX_SILENCE=900。范围 [200, 6000]。 */
+  maxSentenceSilence: Number(process.env.ASR_MAX_SILENCE || 600),
   // 连不上/建任务超时。实时识别本来就要快，8 秒还没 task-started 基本就是
   // Key 错了、模型名错了、或者网络到了墙外——早点报出来，别让人干等。
   connectTimeoutMs: 8000,
@@ -113,6 +127,8 @@ export class AsrStream extends EventEmitter {
             parameters: {
               format: this.opt.format,
               sample_rate: this.opt.sampleRate,
+              // 定稿的静音阈值。默认 1300ms 太长，见 DEFAULT_ASR 里的注释。
+              max_sentence_silence: this.opt.maxSentenceSilence,
               // 心跳：服务端会定期发事件。没有它，讲得慢的时候连接可能被中间的
               // 代理当成空闲连接掐掉，症状是「说一半突然不出字了」。
               heartbeat: true,

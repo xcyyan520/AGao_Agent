@@ -12,11 +12,31 @@
     --accent:#2f81f7;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%}
+  /* ★ 三行都是给真机（尤其手机浏览器/微信内置浏览器）打的补丁，
+     无头 Chrome 量不出来，但真人手机上全都会犯：
+
+     1) text-size-adjust:100% —— 安卓 Chrome 和部分微信内核会「自动调整
+        字号」（font boosting）：它觉得一段文字太窄，就把字放大。放大的
+        结果不是好看，而是把原本算好的高度撑爆，于是底部按钮被挤出屏幕，
+        整页还会横向溢出。这是「手机上显示不全」最常见的一条暗路。
+        开发和截图时完全正常，一到真机就变样。
+
+     2) height:100dvh —— 手机上地址栏是会收放的。`height:100%` 取的是
+        「浏览器界面收起来时」的大视口，地址栏一出现，真实可视区就比它矮，
+        而 body 是 overflow:hidden，矮掉的那截**滚不出来**，底部直接没了。
+        dvh（dynamic viewport height）跟着地址栏实时变，才是对的。
+
+     3) overscroll-behavior:none —— 防止在对话流里滚到底之后继续拽，
+        把整页像橡皮筋一样拉起来（iOS 惯性滚动），松手回弹时看起来像闪屏。 */
+  html,body{margin:0;height:100%; -webkit-text-size-adjust:100%; text-size-adjust:100%}
   body{
     background:var(--bg); color:var(--fg);
     font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    display:flex; flex-direction:column; overflow:hidden;
+    display:flex; flex-direction:column; overflow:hidden; overscroll-behavior:none;
+  }
+  @supports (height: 100dvh){
+    html{height:100dvh}
+    body{height:100dvh}
   }
   header{
     padding:10px 14px; border-bottom:1px solid var(--line); background:var(--panel);
@@ -266,6 +286,42 @@
   .hint{font-size:11.5px; color:var(--dim2); line-height:1.65; margin-top:8px}
   .hint b{color:var(--dim); font-weight:600}
 
+  /* ── 谁在听（音轨胶囊） ──
+     一行一个胶囊，装不下就换行。多面试官时这一行会变长，
+     所以用 flex-wrap 而不是横向滚动——滚动会把最后一个人藏起来，
+     而「谁在听」恰恰是全都要看见的信息。 */
+  .tracks{
+    display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;
+  }
+  .tracks:empty{display:none}
+  .tpill{
+    display:inline-flex; align-items:center; gap:5px;
+    max-width:100%; padding:4px 9px; border-radius:999px;
+    font-size:11.5px; line-height:1.35;
+    background:var(--bg2); border:1px solid var(--line); color:var(--dim2);
+  }
+  .tpill b{color:var(--dim); font-weight:600}
+  .tpill i{font-style:normal; color:var(--dim2); font-size:10.5px}
+  /* 自己的那条：描边亮一点，一眼能在一排里找到自己 */
+  .tpill.mine{border-color:#3d5a45; background:rgba(90,200,130,.07)}
+  .tpill.mine b{color:#8fd8a8}
+  /* 正在说话：整条亮起来。这是唯一说明「现在轮到谁」的信号 */
+  .tpill.speaking{
+    border-color:#4a6a55; background:rgba(90,200,130,.13);
+  }
+  .tpill.speaking .tlive{color:#9fe0b6}
+  /* 没开麦：压暗，一眼能看出这条其实没在工作 */
+  .tpill.off{opacity:.5}
+  .tpill .tlive{
+    color:var(--dim2); max-width:190px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap;
+  }
+  @media(max-width:900px){
+    /* 手机上一行放不下三个名字，让胶囊自己缩，别撑出横向滚动 */
+    .tpill .tlive{max-width:120px}
+    .tracks{gap:4px}
+  }
+
   /* 「更多」按钮：只在手机上出现，见下面的 @media */
   .iconbtn{display:none; flex:0 0 auto; padding:0; width:34px; height:34px;
     font-size:17px; line-height:1; border-radius:8px}
@@ -499,6 +555,23 @@
     .nextq{max-height:38vh; margin-top:6px}
     header h1{display:none}
   }
+
+  /* ── 提示条（toast）──
+     放在屏幕底部往上一截：手机上抽屉盖住下半屏时它也还在，
+     而且不挡「下一个问题」那种要一直看的东西。
+     指针事件全关掉——它只是个提示，不该吃掉任何一次点击。 */
+  #toast{
+    position:fixed; left:50%; bottom:max(18px, calc(env(safe-area-inset-bottom) + 12px));
+    transform:translate(-50%, 12px);
+    max-width:min(86vw, 460px);
+    padding:9px 15px; border-radius:10px;
+    background:rgba(28,34,44,.96); border:1px solid var(--line2);
+    color:var(--text); font-size:12.5px; line-height:1.45; text-align:center;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);
+    opacity:0; pointer-events:none; z-index:200;
+    transition:opacity .22s, transform .22s;
+  }
+  #toast.show{opacity:1; transform:translate(-50%, 0)}
 </style>
 </head>
 <body>
@@ -623,10 +696,16 @@
         <button id="btnReplayOpen" class="mini" title="没有麦克风时用这个：把文字按真人语速喂进去">模拟回放</button>
       </h2>
       <button id="btnMic" class="micbtn">开始说话</button>
+      <!-- 谁在听：一条音轨一个胶囊。
+           以前只显示自己这一路，于是「面试官 2 也在听」这件事在屏幕上
+           没有任何痕迹（另一台设备说什么，这边完全不知道）。
+           现在把整张表摊开，谁开着麦克风、谁正在说话，一眼能看到。 -->
+      <div class="tracks" id="trackList"></div>
       <div class="micshow" id="micShow"></div>
       <div class="hint" id="micHint">
-        <b>两个人各开一台设备</b>，各自点「切换」选好自己是谁，再点「开始说话」。<br>
-        面试官说的话进右边「你实际问出口的问题」，候选人说的话喂给 AI 出题。<br>
+        <b>每个人各开一台设备</b>，各自点「切换」选好自己是谁，再点「开始说话」。<br>
+        候选人说的话喂给 AI 出题；面试官说的话进「你实际问出口的问题」。<br>
+        <b>面试官可以有好几个</b>，每人一条音轨，互不干扰——不用谁抢谁的麦克风。<br>
         第一次点会要麦克风权限，允许一下。
       </div>
     </section>
@@ -885,15 +964,29 @@ function handle(m){
 
     case 'asr_live':
       // 还没定稿的中间结果。只显示，不进对话流、不进切块器。
-      showLive(m.role, m.text);
+      showLive(m.track, m.role, m.text, m.final);
+      break;
+
+    /* ★ 音轨表：谁开着麦克风、谁正在说话。
+       推整张表而不是增量——两台设备各自维护自己的视图时，
+       增量很容易对不齐（实测过：一台关掉麦克风后，另一台还挂着
+       「面试官 2 聆听中」，而那条音轨早就没了）。 */
+    case 'asr_tracks':
+      trackState = m.tracks || [];
+      renderTracks();
       break;
 
     case 'asr_state':
-      if(m.state === 'error'){
-        addNotice(`识别出错：${esc(m.message || '未知')}`, true);
-        if(m.role === myRole) { micRunning = false; syncMicUI(); }
-      } else if(m.state === 'closed' || m.state === 'stopped'){
-        if(m.role === myRole && micRunning){ micRunning = false; syncMicUI(); }
+      /* 只在自己这条轨上动按钮状态。
+         别人的轨出错不该影响我这台设备的按钮——以前按 role 判断，
+         于是第二个面试官一连上来就把第一个的按钮搞乱了。 */
+      if(m.track === myTrack){
+        if(m.state === 'error'){
+          addNotice(`识别出错：${esc(m.message || '未知')}`, true);
+          if(micRunning && !micStream) { micRunning = false; syncMicUI(); }
+        } else if(m.state === 'closed' || m.state === 'stopped'){
+          if(micRunning && !micStream){ micRunning = false; syncMicUI(); }
+        }
       }
       break;
   }
@@ -1017,17 +1110,40 @@ function addNotice(text, isErr){
   scroll();
 }
 
+/* 提示条：固定在屏幕底部往上一点的位置，不放进对话流里。
+   ★ 以前 flash() 是往 #feed 里 append 一行小字。桌面端看着还行，
+     手机上是灾难——用户点的是抽屉里的「保存材料」，而抽屉是
+     position:fixed 盖住了半个屏幕，#feed 被压在下面（实测
+     scrollTop=1743 / scrollH=2289，那行小字在可视区之外）。
+     结果就是「我点了保存，一点反应都没有」，其实保存成功了，
+     字也确实写进材料框了，只是没长在眼睛能看见的地方。
+
+     教训：任何「操作反馈」都不能渲染在可能被折叠、被盖住、
+     被滚出视口的地方。用户的注意力只在他刚点的那个按钮附近，
+     要么贴着按钮提示，要么直接糊在屏幕最上层。 */
 let flashEl = null;
 function flash(msg){
   if(!flashEl){
     flashEl = document.createElement('div');
-    flashEl.style.cssText =
-      'font-size:12px; color:var(--vague); text-align:center; padding:4px; transition:opacity .4s';
-    $('feed').appendChild(flashEl);
+    flashEl.id = 'toast';
+    document.body.appendChild(flashEl);
   }
   flashEl.textContent = msg;
+  flashEl.classList.add('show');
   clearTimeout(flashEl._t);
-  flashEl._t = setTimeout(() => { flashEl.style.opacity = '0'; }, 2500);
+  flashEl._t = setTimeout(() => { flashEl.classList.remove('show'); }, 2600);
+}
+
+/* 换场/清空时把提示条撤掉。
+   以前各处直接写 `flashEl = null`，那时提示条是 #feed 的子节点，
+   跟着 innerHTML 一起没了，所以赋 null 是对的。现在它挂在 body 上，
+   赋 null 只会让下一次 flash() 再造一个，旧的那个永远留在 DOM 里。 */
+function resetFlash(){
+  if(flashEl){
+    clearTimeout(flashEl._t);
+    flashEl.remove();
+    flashEl = null;
+  }
 }
 
 function scroll(){
@@ -1084,13 +1200,48 @@ async function refreshState(){
     pollBackfill(s.history);
     // 对话流也补：手机走隧道时 SSE 不通，面试官说的话只能靠这里上屏
     pollLines(s.transcript);
-    /* 服务端已经在替我这个角色听的时候，把按钮显示成「正在说话」。
-       典型场景：这台设备刷新了页面——麦克风停了，但服务端那一路还开着，
-       按钮却显示「开始说话」，人会再点一次，等于开了第二路。
-       只在本地确实没在采集时才跟随（micStream 为空即没采集）。 */
-    if(!micStream && s.asr){
-      const on = s.asr[myRole] === 'listening';
-      if(on !== micRunning){ micRunning = on; syncMicUI(); }
+    /* 服务端已经在替我这台设备听的时候，把按钮显示成「正在说话」。
+       典型场景：这台设备刷新了页面——麦克风停了，但服务端那条轨还开着，
+       按钮却显示「开始说话」，人会再点一次，等于开了第二条。
+
+       ★ 判断依据从「我的角色在不在听」改成「我这条音轨在不在听」：
+         以前按角色判断，多个面试官时第一个人刷新页面就会看到
+         别人那条轨的状态，以为自己的麦还开着。 */
+    if(s.tracks){
+      trackState = s.tracks;
+      renderTracks();
+      if(!micStream){
+        const mine = trackState.find(t => t.track === myTrack);
+        const on = !!(mine && mine.listening);
+        if(on !== micRunning){ micRunning = on; syncMicUI(); }
+      } else {
+        /* ★ 麦克风开着的时候，每 2 秒看一眼服务端那条轨到底有没有在收音频。
+           判据是 bytes（服务端累计收到的字节数）：
+             - 轨没了            → 一定没在收，立刻接回去
+             - listening 是 false → 同上
+             - bytes 连续 8 秒没动过 → 连接僵住了（WS 半开是最常见的形态：
+               双向都以为对方还活着，实际一个字节都过不去），也接回去。
+           这条检查补的是 flushMic 里 accepted 那条路的盲区：
+           accepted 只在请求成功返回时才看得到，而卡死的时候请求会一直挂着。 */
+        const mine = trackState.find(t => t.track === myTrack);
+        const now = Date.now();
+        if(micRunning && !micReviving){
+          if(!mine || !mine.listening){
+            reviveMic();
+          } else if(mine.bytes !== trkBytes){
+            trkBytes = mine.bytes;
+            trkBytesStuckAt = now;
+          } else if(trkBytesStuckAt && now - trkBytesStuckAt > 8000){
+            // 字节数 8 秒没动过：不是人没说话（那样至少会有静音帧），
+            // 是这条连接僵住了。
+            trkBytesStuckAt = now;      // 重置计时，避免每 2 秒重连一次
+            reviveMic();
+          }
+        } else if(!micRunning || micReviving){
+          trkBytes = mine ? mine.bytes : -1;
+          trkBytesStuckAt = now;
+        }
+      }
     }
 
     $('stChunks').textContent = heard;
@@ -1116,6 +1267,16 @@ async function refreshState(){
     $('stFirst').textContent = pctOf(s.stats.draftLatency)(.5);
     $('stP50').textContent = pctOf(s.stats.latency)(.5);
     $('stP90').textContent = pctOf(s.stats.latency)(.9);
+
+    /* 预热耗时挂在「首字 p50」的 title 上，不占版面。
+       为什么不做成常显的数字：它不是一项指标，而是一次性成本，
+       面试官真正关心的只有「第一题为什么慢」。鼠标停上去就能看到。 */
+    if(s.stats && s.stats.warmupMs != null){
+      $('stFirst').title = `前缀已预热（${s.stats.warmupMs}ms）—— 材料一进来就先让网关把提示词读了一遍，
+所以第一题不用再等冷启动。`;
+    }else{
+      $('stFirst').title = '还没有材料，或预热没跑成（不影响出题）';
+    }
 
     $('modelPill').textContent = s.conf.model + ' @ ' + s.conf.baseUrl.replace(/^https?:\/\//,'');
   }catch(_){}
@@ -1289,7 +1450,7 @@ async function loadSessionIntoView(id, btn){
     feed.innerHTML = '';
     saidEl = null;
     saidBlockEl.interviewer = null;
-    flashEl = null;   // 它刚才挂在旧的 feed 上，已经被 innerHTML 清掉了
+    resetFlash();
 
     const lines = g.lines || [];
     const head = document.createElement('div');
@@ -1401,7 +1562,7 @@ async function deleteSession(id, btn, label){
        否则看起来"删了但还在"。但不要自动换场——人可能只是顺手清一下库。 */
     if(id === SESSION){
       $('feed').innerHTML = '<div class="empty" id="emptyHint">这一场的记录已经删掉了。</div>';
-      saidEl = null; saidBlockEl.interviewer = null; flashEl = null;
+      saidEl = null; saidBlockEl.interviewer = null; resetFlash();
       lineCount = 0; histLen = -1; ceilSeq = -1;
       resetPanel();
     }
@@ -1645,7 +1806,7 @@ async function switchSession(nextId, { keepMaterial = true } = {}){
   $('feed').innerHTML = '<div class="empty" id="emptyHint">新的一场已经开始了。点「开始说话」，题目就会跟着来。</div>';
   saidEl = null;
   saidBlockEl.interviewer = null;
-  flashEl = null;
+  resetFlash();
   lineCount = 0;
   histLen = -1;
   ceilSeq = -1;
@@ -1752,6 +1913,32 @@ $('btnSaveCfg').onclick = async () => {
    存在 localStorage 里：刷新页面、锁屏再回来，不该又变回默认值。 */
 let myRole = localStorage.getItem('micRole') === 'interviewer' ? 'interviewer' : 'candidate';
 
+/* ★ 音轨 id 存在 localStorage 里，由这台设备自己持有。
+   为什么不由服务端分配：刷新页面、断网重连之后要能接回原来那条。
+   服务端给随机 id 的话，刷新一次在页面上就多一条「面试官 2」，
+   而旧的那条还挂在服务端白烧额度（它没有音源，但 WebSocket 还开着）。
+   自己持 id，服务端就永远只有真实存在的那么几条。
+
+   为什么「面试官」的音轨 id 要带随机后缀：
+   三个面试官都选「面试官」时，如果 id 都是 'interviewer'，
+   第三个人一开麦就把前两个人顶掉了——表现为「A 说完话，A 的麦克风
+   自己关了」。加上随机后缀，每个人是一条独立的轨。
+   而候选人只有一个，用固定 id 'candidate' 就行——万一两个人
+   都错选了候选人，那也是后开的那个人接管，符合「场上只有一个候选人」。 */
+function newTrackId(role){
+  if(role === 'candidate') return 'candidate';
+  const keep = localStorage.getItem('micTrack');
+  if(keep && keep.startsWith('iv_')) return keep;
+  const id = 'iv_' + Math.random().toString(36).slice(2, 8);
+  localStorage.setItem('micTrack', id);
+  return id;
+}
+let myTrack = newTrackId(myRole);
+
+/* 这台设备自己的显示名。多个面试官时，页面上要能分出「张工问的」和
+   「李工问的」。默认给个编号，用户可以改。 */
+let myLabel = localStorage.getItem('micLabel') || (myRole === 'interviewer' ? '面试官' : '候选人');
+
 let micStream = null;    // MediaStream
 let micCtx = null;       // AudioContext
 let micNode = null;      // ScriptProcessor
@@ -1760,6 +1947,23 @@ let micRunning = false;
 let micSending = 0;      // 还在飞的 /api/asr/feed 请求数，用来做背压
 let micPending = [];     // 攒着还没发的 PCM 块
 let micTimer = null;     // 定时冲积压音频的兜底（见 startMic 结尾）
+/* ★ 连续多少次音频块被服务端丢了（accepted=0）。
+   这是「语音时灵时不灵」最主要的一条暗路：服务端那条音轨如果没了
+   （被重置、被别的设备顶掉、连接断了），/api/asr/feed 会**静默**返回
+   accepted:0 —— 它不报错，因为「点了停止之后还有半秒在途音频」是正常的。
+   而前端从来没看过这个字段：按钮一直亮着「正在说话」，音频全被丢掉，
+   人看到的就是「有时候说话它认得，有时候一个字都不出」。 */
+let micDeadCount = 0;
+let micReviving = false;
+/* 服务端那条音轨的 bytes 上次是多少、什么时候没变过。
+   麦克风开着、服务端也说在听，但字节数一动不动 = 音频其实没到。 */
+let trkBytes = -1;
+let trkBytesStuckAt = 0;
+/* 服务端现在的音轨表。轮询和 SSE 都会更新它。
+   ★ 判断「我这条是不是还活着」必须看它，而不是看本地的 micRunning：
+     麦克风可能因为切到后台被浏览器掐了（micRunning 还是 true，但没声音），
+     也可能服务端那条被重置关掉了（micRunning 还亮着，音频全被丢弃）。 */
+let trackState = [];
 
 const MIC_RATE = 16000;
 const MIC_CHUNK_MS = 250;        // 多久发一次音频
@@ -1800,17 +2004,89 @@ async function flushMic(){
   const body = new Blob(parts);
   micSending++;
   try{
-    await fetch(`/api/asr/feed?s=${encodeURIComponent(SESSION)}&role=${myRole}`, {
+    const r = await fetch(`/api/asr/feed?s=${encodeURIComponent(SESSION)}&track=${encodeURIComponent(myTrack)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body
     });
+    /* ★ 检查 accepted：这是「音频到底有没有被收下」的唯一信号。
+       服务端在音轨不存在时静默返回 accepted:0（见 server.mjs 的说明，
+       那条注释是对的——点了停止之后有半秒在途音频属正常）。
+       但连续几十次都是 0 就不正常了，说明我这条音轨在服务端已经没了。
+       以前没检查这里，于是表现为「按钮亮着、一个字都不出」。 */
+    const j = await r.json().catch(() => null);
+    if(j && j.ok && j.accepted === 0 && micRunning){
+      micDeadCount++;
+      // 连丢 6 次（约 1.5 秒）就试着把自己接回去。不等到 20 次：
+      // 那已经是一句话的长度了，人早就在说「它又不灵了」。
+      if(micDeadCount >= 6){ await reviveMic(); }
+    } else if(j && j.accepted > 0){
+      micDeadCount = 0;
+    }
   }catch(_){
     // 发失败就是丢这 250ms 的音。不重试：重发会让音频错位，
     // 识别结果对不上时间轴，比丢一点更糟。
   }finally{
     micSending--;
   }
+}
+
+/* 音轨在服务端掉了（或从来没建起来），原地接回去。
+   ★ 不能走 stopMic() → startMic()：那会重新申请 getUserMedia、
+     弹一次权限、重建 AudioContext，用户体验是「啪一下全断了」。
+     这里只补服务端那半（重新 run-task），本地采集节点一行不动。 */
+async function reviveMic(){
+  if(micReviving || !micRunning || !micStream) return;
+  micReviving = true;
+  micDeadCount = 0;
+  try{
+    const r = await fetch('/api/asr/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ session: SESSION, track: myTrack, role: myRole, label: myLabel })
+    });
+    const j = await r.json().catch(() => null);
+    if(j && j.ok){
+      addNotice('识别连接掉过一次，已经自动接回来了');
+    } else {
+      addNotice(`识别掉线，自动重连失败：${(j && j.error) || '未知原因'}`, true);
+    }
+  }catch(e){
+    addNotice('识别掉线，自动重连没成功（网络问题）', true);
+  }finally{
+    // 给握手留点时间，别在这个窗口里又判定一次掉线
+    setTimeout(() => { micReviving = false; }, 3000);
+  }
+}
+
+/* 一串胶囊：谁在听、谁正在说话。
+   自己的那条高亮，别人的暗一点——一眼能看出「现在轮到谁」。 */
+function renderTracks(){
+  const box = $('trackList');
+  if(!box) return;
+  if(!trackState.length){ box.innerHTML = ''; return; }
+  box.innerHTML = trackState.map(t => {
+    const mine = t.track === myTrack;
+    const speaking = !!(t.live && t.live.length);
+    const cls = 'tpill' + (mine ? ' mine' : '') + (speaking ? ' speaking' : '') +
+                (t.listening ? ' on' : ' off');
+    const who = t.label || (t.role === 'interviewer' ? '面试官' : '候选人');
+    const what = speaking ? t.live
+      : t.listening ? '在听…'
+      : '没开麦';
+    return `<span class="${cls}" title="${esc(who + (mine ? '（这台设备）' : ''))}">
+      <b>${esc(who)}</b>${mine ? '<i>·我</i>' : ''}
+      <span class="tlive">${esc(what)}</span>
+    </span>`;
+  }).join('');
+}
+
+function syncMicUI(){
+  const b = $('btnMic');
+  b.textContent = micRunning ? '● 正在说话（点这里暂停）' : '开始说话';
+  b.className = 'micbtn' + (micRunning ? ' on' : '');
+  $('micWho').textContent = (myRole === 'interviewer' ? '我是面试官' : '我是面试者') + (myLabel ? '：' + myLabel : '');
+  $('micWho').className = 'pill' + (myRole === 'interviewer' ? ' warn' : '');
+  renderTracks();
 }
 
 async function startMic(){
@@ -1833,10 +2109,12 @@ async function startMic(){
     // 先在服务端开好 WS，再开始送音频。反过来的话开头几百毫秒会被丢掉。
     const r = await fetch('/api/asr/start', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ session: SESSION, role: myRole })
+      body: JSON.stringify({ session: SESSION, track: myTrack, role: myRole, label: myLabel })
     });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || '服务端开不了识别');
+    // 服务端如果分配/复用了别的 id（理论上不会，但别假设），跟随它。
+    if(j.track) myTrack = j.track;
 
     micCtx = new (window.AudioContext || window.webkitAudioContext)();
     // 手机浏览器上 AudioContext 默认是 suspended，要显式 resume，
@@ -1876,6 +2154,8 @@ async function startMic(){
     micSink.connect(micCtx.destination);   // 必须连到 destination 才会被驱动，哪怕音量是 0
 
     micRunning = true;
+    micDeadCount = 0;
+    trkBytes = -1;
     syncMicUI();
     // 定时兜底：onaudioprocess 的节奏不稳，网慢的时候要有个地方重试积压的块
     micTimer = setInterval(flushMic, MIC_CHUNK_MS);
@@ -1890,6 +2170,8 @@ async function startMic(){
 async function stopMic(){
   if(!micRunning && !micStream) return;
   micRunning = false;
+  micDeadCount = 0;
+  trkBytes = -1;
   clearInterval(micTimer); micTimer = null;
 
   if(micNode){ try{ micNode.disconnect(); }catch(_){} micNode = null; }
@@ -1904,18 +2186,10 @@ async function stopMic(){
   try{
     await fetch('/api/asr/stop', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ session: SESSION, role: myRole })
+      body: JSON.stringify({ session: SESSION, track: myTrack })
     });
   }catch(_){}
   syncMicUI();
-}
-
-function syncMicUI(){
-  const b = $('btnMic');
-  b.textContent = micRunning ? '● 正在说话（点这里暂停）' : '开始说话';
-  b.className = 'micbtn' + (micRunning ? ' on' : '');
-  $('micWho').textContent = myRole === 'interviewer' ? '我是面试官' : '我是面试者';
-  $('micWho').className = 'pill' + (myRole === 'interviewer' ? ' warn' : '');
 }
 
 function micError(msg){
@@ -1932,10 +2206,67 @@ $('btnMic').onclick = async () => {
   else await startMic();
 };
 
+/* ★ 切到后台再回来，麦克风经常已经哑了。
+   手机浏览器（尤其 iOS Safari 和微信内置浏览器）在页面不可见时会
+   把 AudioContext 挂起，或者把麦克风轨结束掉（track.readyState 变 'ended'）。
+   人切回来看按钮还亮着「正在说话」，就一直在说，而一个字都没上去——
+   这就是典型的「有时候灵有时候不灵」。下面是两条兜底：
+     1) 回到前台立刻 resume AudioContext（不 resume 的话 ScriptProcessor 不回调）
+     2) 麦克风轨已经 ended 的，整条重开（本地轨断了，服务端补不回来） */
+document.addEventListener('visibilitychange', async () => {
+  if(document.visibilityState !== 'visible') return;
+  if(!micRunning) return;
+
+  const dead = !micStream || micStream.getTracks().every(t => t.readyState === 'ended');
+  if(dead){
+    addNotice('切回来发现麦克风已经被系统关了，正在重新打开…', true);
+    await stopMic();
+    await startMic();
+    return;
+  }
+  if(micCtx && micCtx.state === 'suspended'){
+    try{
+      await micCtx.resume();
+      // resumes 之后 WS 那头可能也僵了，交给 refreshState 的 bytes 检查去兜
+      trkBytesStuckAt = Date.now();
+      addNotice('回到页面，麦克风已恢复');
+    }catch(_){}
+  }
+});
+
+/* ★ 换角色：不停止采集，只换标签。
+   以前这里是 `if(micRunning) await stopMic()` 然后整个重开——
+   实测一次切换要 2~3 秒（停 WS、关 AudioContext、再重新握手），
+   而那两三秒正好卡在「他刚说完一句、你要接话」的地方。
+   现在音频流一秒都不断：服务端那边 role 只是这条轨的标签，
+   改标签不影响已经在跑的识别连接（见 server.mjs startAsr）。
+   音轨 id 也要跟着换：候选人和面试官在服务端是两种不同的处理路径，
+   同一条 id 换角色会让服务端的分支逻辑拿旧值。 */
 $('btnRole').onclick = async () => {
-  if(micRunning) await stopMic();   // 换角色必须先停：音频要发到另一路去
+  const oldTrack = myTrack;
   myRole = myRole === 'interviewer' ? 'candidate' : 'interviewer';
   localStorage.setItem('micRole', myRole);
+  localStorage.removeItem('micTrack');       // 旧 id 属于旧角色，丢掉
+  myTrack = newTrackId(myRole);
+  myLabel = myRole === 'interviewer' ? '面试官' : '候选人';
+  localStorage.setItem('micLabel', myLabel);
+
+  if(micRunning){
+    // 音频流不停，只是让服务端把这条轨换到另一个角色上。
+    try{
+      await fetch('/api/asr/start', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session: SESSION, track: myTrack, role: myRole, label: myLabel })
+      });
+      // 旧音轨没人喂了，让服务端收掉，别让它挂着白烧额度
+      if(oldTrack && oldTrack !== myTrack){
+        await fetch('/api/asr/stop', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ session: SESSION, track: oldTrack })
+        });
+      }
+    }catch(_){}
+  }
   syncMicUI();
   flash(myRole === 'interviewer'
     ? '这台设备现在是【面试官】：你说的每句话会变成问题'
@@ -1944,9 +2275,13 @@ $('btnRole').onclick = async () => {
 
 /* 中间结果和定稿都画在这一个框里。
    中间结果用完就丢、定稿才进对话流——两者混在一起会让「他已经说到哪了」
-   变得看不出来。 */
-function showLive(role, text){
-  if(role !== myRole && text) return;   // 只显示自己这一路，别把别人的话也贴在自己框里
+   变得看不出来。
+
+   ★ 只画自己这条音轨。以前是按 role 判断的，于是同一台设备上
+     切角色之后、或者两个面试官共用 role 时，别人的话会贴到自己框里。 */
+function showLive(track, role, text, final){
+  if(track !== myTrack && !final) return;   // 别人的中间结果不显示
+  if(track !== myTrack) return;             // 定稿也不算：它在对话流里已经有了
   const el = $('micShow');
   el.textContent = text || '';
   el.style.color = text ? 'var(--dim)' : '';
